@@ -40,6 +40,7 @@ export default function PlansPage() {
 
   // right-pane data
   const [manifest, setManifest] = useState<RunManifestEntry[]>([]);
+  const [selectedBuild, setSelectedBuild] = useState<number | "">("");
   const [builds, setBuilds] = useState<Build[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
@@ -73,27 +74,39 @@ export default function PlansPage() {
     api.suites(currentProject.id).then(setSuites).catch(() => setSuites([]));
   }, [currentProject]);
 
-  async function refreshManifest(planId: number) {
-    setManifest(await api.runManifest(planId).catch(() => [] as RunManifestEntry[]));
+  async function refreshManifest(planId: number, buildId: number | "") {
+    setManifest(
+      await api
+        .runManifest(planId, buildId === "" ? undefined : Number(buildId))
+        .catch(() => [] as RunManifestEntry[]),
+    );
   }
 
+  // builds / milestones / executions load on plan change
   useEffect(() => {
     if (!selectedPlan) return;
     setLoadingRight(true);
     setExecutions([]);
     setErr(null);
+    setSelectedBuild(""); // reset gating scope to global-latest for the new plan
     Promise.all([
-      refreshManifest(selectedPlan.id),
       api.builds(selectedPlan.id).catch(() => [] as Build[]),
       api.milestones(selectedPlan.id).catch(() => [] as Milestone[]),
       api.planExecutions(selectedPlan.id).catch(() => [] as Execution[]),
-    ]).then(([, b, m, e]) => {
+    ]).then(([b, m, e]) => {
       setBuilds(b);
       setMilestones(m);
       setExecutions(e);
       setLoadingRight(false);
     });
   }, [selectedPlan]);
+
+  // manifest re-fetches whenever the plan or the gating build changes
+  useEffect(() => {
+    if (!selectedPlan) return;
+    refreshManifest(selectedPlan.id, selectedBuild);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlan, selectedBuild]);
 
   useEffect(() => {
     if (pickSuite === "") {
@@ -123,7 +136,7 @@ export default function PlansPage() {
     try {
       await api.addCases(selectedPlan.id, [...picked], urgency);
       setPicked(new Set());
-      await refreshManifest(selectedPlan.id);
+      await refreshManifest(selectedPlan.id, selectedBuild);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed to add cases");
     } finally {
@@ -139,7 +152,7 @@ export default function PlansPage() {
       await api.addDependency(Number(depFrom), Number(depTo));
       setDepFrom("");
       setDepTo("");
-      await refreshManifest(selectedPlan.id);
+      await refreshManifest(selectedPlan.id, selectedBuild);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed to add dependency (cycle? cross-project?)");
     } finally {
@@ -237,6 +250,27 @@ export default function PlansPage() {
 
             {/* RUN MANIFEST — the centerpiece */}
             <Panel title={`run manifest · ${selectedPlan.name}`} pad={false}>
+              {/* gating scope: global-latest, or scoped to a single build */}
+              <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-4 py-2.5">
+                <span className="label">gating for build</span>
+                <Select
+                  value={selectedBuild}
+                  onChange={(e) =>
+                    setSelectedBuild(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  className="!w-auto"
+                >
+                  <option value="">all builds (latest)</option>
+                  {builds.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </Select>
+                {selectedBuild !== "" && (
+                  <span className="label text-[var(--color-text-faint)]">
+                    a prerequisite counts only if it passed in this build
+                  </span>
+                )}
+              </div>
               {manifest.length === 0 ? (
                 <div className="p-4">
                   <EmptyState title="empty run list" hint="add cases below to build the manifest" />

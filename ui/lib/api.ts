@@ -113,8 +113,10 @@ export const api = {
   planExecutions: (planId: number) => request<Execution[]>("GET", `/plans/${planId}/executions`),
   addCases: (planId: number, caseIds: number[], urgency = 2) =>
     request<unknown[]>("POST", `/plans/${planId}/cases`, { case_ids: caseIds, urgency }),
-  runManifest: (planId: number) =>
-    request<RunManifestEntry[]>("GET", `/plans/${planId}/manifest`),
+  runManifest: (planId: number, buildId?: number) =>
+    request<RunManifestEntry[]>("GET", `/plans/${planId}/manifest`, undefined, {
+      build_id: buildId,
+    }),
   addDependency: (caseId: number, dependsOnCaseId: number) =>
     request<{ case_id: number; depends_on_case_id: number }>(
       "POST",
