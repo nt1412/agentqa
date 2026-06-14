@@ -129,6 +129,58 @@ async def list_unverified_claims(
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def list_claims(
+    session: AsyncSession, project_id: int | None = None, plan_id: int | None = None
+) -> list[dict]:
+    """All claims (optionally scoped) with their latest verdict + verification count.
+
+    Powers the audit board: verdict None => Unverified column; otherwise the
+    most recent verdict decides the column (re-verifying overrides, history kept).
+    """
+    stmt = select(ExecutionClaim)
+    if project_id is not None or plan_id is not None:
+        stmt = stmt.join(Execution, Execution.id == ExecutionClaim.execution_id)
+        if plan_id is not None:
+            stmt = stmt.where(Execution.plan_id == plan_id)
+        if project_id is not None:
+            stmt = (
+                stmt.join(TestCaseVersion, TestCaseVersion.id == Execution.version_id)
+                .join(TestCase, TestCase.id == TestCaseVersion.case_id)
+                .where(TestCase.project_id == project_id)
+            )
+    stmt = stmt.order_by(ExecutionClaim.id)
+    claims = list((await session.execute(stmt)).scalars().all())
+    if not claims:
+        return []
+
+    claim_ids = [c.id for c in claims]
+    vrows = (
+        await session.execute(
+            select(ClaimVerification.claim_id, ClaimVerification.verdict, ClaimVerification.id)
+            .where(ClaimVerification.claim_id.in_(claim_ids))
+            .order_by(ClaimVerification.id.desc())  # newest first
+        )
+    ).all()
+    latest: dict[int, str] = {}
+    counts: dict[int, int] = {}
+    for cid, verdict, _vid in vrows:
+        counts[cid] = counts.get(cid, 0) + 1
+        if cid not in latest:  # first seen is newest
+            latest[cid] = verdict
+
+    return [
+        {
+            "id": c.id,
+            "execution_id": c.execution_id,
+            "claim_text": c.claim_text,
+            "created_at": c.created_at,
+            "verification_count": counts.get(c.id, 0),
+            "verdict": latest.get(c.id),
+        }
+        for c in claims
+    ]
+
+
 async def verify_claim(
     session: AsyncSession, claim_id: int, data, auditor_id: int
 ) -> ClaimVerification:

@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import select
 
 from app.schemas.evidence import VerificationCreate
 from app.schemas.execution import ExecutionCreate
@@ -106,3 +107,44 @@ async def test_list_unverified_claims_scoped_by_project(session):
     scoped = await evidence.list_unverified_claims(session, project_id=proj_a)
     assert len(scoped) == 1
     assert scoped[0].execution_id == ex_a.id
+
+
+@pytest.mark.asyncio
+async def test_list_claims_with_latest_verdict_and_override(session, user):
+    await _execution_with_claim(session, "LC1")
+    claim_id = (await evidence.list_unverified_claims(session))[0].id
+
+    # before verification: in list_claims with verdict=None
+    rows = {r["id"]: r for r in await evidence.list_claims(session)}
+    assert rows[claim_id]["verdict"] is None
+    assert rows[claim_id]["verification_count"] == 0
+
+    await evidence.verify_claim(
+        session, claim_id, VerificationCreate(verdict="confirmed"), auditor_id=user.id
+    )
+    # override with a newer verdict
+    await evidence.verify_claim(
+        session, claim_id, VerificationCreate(verdict="refuted"), auditor_id=user.id
+    )
+
+    rows = {r["id"]: r for r in await evidence.list_claims(session)}
+    assert rows[claim_id]["verdict"] == "refuted"  # latest wins
+    assert rows[claim_id]["verification_count"] == 2  # history kept
+
+
+@pytest.mark.asyncio
+async def test_list_claims_scoped_by_project(session, user):
+    await _execution_with_claim(session, "LC2A")
+    ex_b = await _execution_with_claim(session, "LC2B")
+    from app.models.testcase import TestCase, TestCaseVersion
+
+    # project of ex_b
+    pid = (
+        await session.execute(
+            select(TestCase.project_id)
+            .join(TestCaseVersion, TestCaseVersion.case_id == TestCase.id)
+            .where(TestCaseVersion.id == ex_b.version_id)
+        )
+    ).scalar_one()
+    scoped = await evidence.list_claims(session, project_id=pid)
+    assert len(scoped) == 1

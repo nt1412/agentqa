@@ -108,6 +108,8 @@ export interface Claim {
   execution_id: number;
   claim_text: string;
   created_at?: string;
+  verification_count?: number;
+  verdict?: "confirmed" | "refuted" | "inconclusive" | null;
 }
 
 export interface Verification {

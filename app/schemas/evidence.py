@@ -25,6 +25,15 @@ class ClaimOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ClaimWithVerdict(BaseModel):
+    id: int
+    execution_id: int
+    claim_text: str
+    created_at: dt.datetime
+    verification_count: int = 0
+    verdict: str | None = None  # latest verdict, or None if still unverified
+
+
 class VerificationCreate(BaseModel):
     verdict: str  # confirmed|refuted|inconclusive
     reasoning: dict | None = None

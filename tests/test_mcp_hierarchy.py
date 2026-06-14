@@ -28,6 +28,17 @@ async def _plan(session, prefix):
 
 
 @pytest.mark.asyncio
+async def test_create_test_plan_tool(session):
+    p = await projects.create_project(session, ProjectCreate(name="CP", prefix="CPT"))
+    plan = await mcp.create_test_plan(project_id=p.id, name="Smoke", notes="n")
+    assert plan["id"] is not None
+    assert plan["name"] == "Smoke"
+    # the returned id is usable by the other hierarchy tools
+    added = await mcp.add_cases_to_plan(plan_id=plan["id"], case_ids=[])
+    assert added == []
+
+
+@pytest.mark.asyncio
 async def test_get_suite_tree_tool(session):
     p, _ = await _plan(session, "HT1")
     await mcp.create_test_suite(project_id=p.id, path="Purple/SOC")

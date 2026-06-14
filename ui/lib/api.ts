@@ -126,6 +126,8 @@ export const api = {
     request<SimilarFailure[]>("GET", `/cases/${caseId}/similar-failures`),
   unverifiedClaims: (planId?: number) =>
     request<Claim[]>("GET", "/claims/unverified", undefined, { plan_id: planId }),
+  claims: (projectId?: number, planId?: number) =>
+    request<Claim[]>("GET", "/claims", undefined, { project_id: projectId, plan_id: planId }),
   verifyClaim: (claimId: number, verdict: string, reasoning?: Record<string, unknown>) =>
     request<unknown>("POST", `/claims/${claimId}/verify`, { verdict, reasoning }),
   agentHistory: (agentId: number) =>

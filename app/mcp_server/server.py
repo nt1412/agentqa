@@ -481,6 +481,19 @@ async def get_suite_tree(project_id: int) -> list[dict]:
 
 
 @mcp.tool()
+async def create_test_plan(project_id: int, name: str, notes: str | None = None) -> dict:
+    """Create a test plan — the container an agent fills with an ordered run list.
+
+    Returns its id; pass that to add_cases_to_plan and get_run_manifest.
+    """
+    from app.schemas.plan import PlanCreate
+
+    async with _session() as s:
+        plan = await plans.create_plan(s, project_id, PlanCreate(name=name, notes=notes))
+        return {"id": plan.id, "name": plan.name, "project_id": plan.project_id}
+
+
+@mcp.tool()
 async def add_cases_to_plan(
     plan_id: int, case_ids: list[int], urgency: int = 2
 ) -> list[dict]:

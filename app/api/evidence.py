@@ -12,6 +12,7 @@ from app.schemas.evidence import (
     AuditReportOut,
     CaseEvaluation,
     ClaimOut,
+    ClaimWithVerdict,
     EvidenceBundle,
     FailureContext,
     SimilarFailure,
@@ -61,6 +62,17 @@ async def unverified_claims(
     plan_id: int | None = None,
 ):
     return await evidence.list_unverified_claims(session, project_id, plan_id)
+
+
+@router.get("/claims", response_model=list[ClaimWithVerdict])
+async def all_claims(
+    session: SessionDep,
+    user: CurrentUser,
+    project_id: int | None = None,
+    plan_id: int | None = None,
+):
+    """All claims with their latest verdict — the audit board's full state."""
+    return await evidence.list_claims(session, project_id, plan_id)
 
 
 @router.post(
