@@ -70,3 +70,15 @@ async def test_api_key_issue_and_use(client, auth_headers):
     resp = await client.get("/api/v1/auth/me", headers={"X-API-Key": key})
     assert resp.status_code == 200
     assert resp.json()["login"] == "alice"
+
+
+def test_prod_requires_jwt_secret(monkeypatch):
+    import app.config
+    from app.main import create_app
+
+    app.config.get_settings.cache_clear()
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setenv("JWT_SECRET", "change-me-in-production")
+    with pytest.raises(RuntimeError):
+        create_app()
+    app.config.get_settings.cache_clear()

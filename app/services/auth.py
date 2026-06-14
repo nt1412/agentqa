@@ -1,4 +1,5 @@
 import datetime as dt
+import hashlib
 import secrets
 
 from jose import JWTError, jwt
@@ -40,6 +41,10 @@ def generate_api_key() -> str:
     return "aqa_" + secrets.token_urlsafe(32)
 
 
+def hash_api_key(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
 async def authenticate_user(session: AsyncSession, login: str, password: str) -> User:
     user = (await session.execute(select(User).where(User.login == login))).scalar_one_or_none()
     if user is None or not user.password_hash or not verify_password(password, user.password_hash):
@@ -58,7 +63,9 @@ async def user_from_token(session: AsyncSession, token: str) -> User:
 
 
 async def user_from_api_key(session: AsyncSession, api_key: str) -> User:
-    user = (await session.execute(select(User).where(User.api_key == api_key))).scalar_one_or_none()
+    user = (
+        await session.execute(select(User).where(User.api_key == hash_api_key(api_key)))
+    ).scalar_one_or_none()
     if user is None or not user.active:
         raise Unauthorized("invalid api key")
     return user

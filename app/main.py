@@ -19,6 +19,12 @@ _ERROR_STATUS = {
 
 
 def create_app() -> FastAPI:
+    from app.config import get_settings
+
+    settings = get_settings()
+    if settings.environment == "prod" and settings.jwt_secret == "change-me-in-production":
+        raise RuntimeError("JWT_SECRET must be set when ENVIRONMENT=prod")
+
     app = FastAPI(title="AgentQA", version="0.1.0")
 
     @app.exception_handler(NotFound)

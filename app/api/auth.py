@@ -19,9 +19,10 @@ async def login(body: LoginRequest, session: SessionDep):
 
 @router.post("/token", response_model=ApiKeyResponse)
 async def issue_api_key(session: SessionDep, user: CurrentUser):
-    user.api_key = auth.generate_api_key()
+    raw = auth.generate_api_key()
+    user.api_key = auth.hash_api_key(raw)
     await session.commit()
-    return ApiKeyResponse(api_key=user.api_key)
+    return ApiKeyResponse(api_key=raw)
 
 
 @router.get("/me", response_model=UserOut)

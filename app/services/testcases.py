@@ -88,6 +88,7 @@ async def create_version(
         execution_type=data.execution_type
         if data.execution_type is not None
         else latest.execution_type,
+        estimated_duration=latest.estimated_duration,
     )
     session.add(new_version)
     await session.flush()
@@ -112,8 +113,12 @@ async def create_version(
         s.step_number = i
         session.add(s)
     await session.commit()
-    await session.refresh(new_version)
-    return new_version
+    stmt = (
+        select(TestCaseVersion)
+        .where(TestCaseVersion.id == new_version.id)
+        .options(selectinload(TestCaseVersion.steps))
+    )
+    return (await session.execute(stmt)).scalar_one()
 
 
 async def get_test_case(session: AsyncSession, case_id: int):

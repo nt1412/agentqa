@@ -1,6 +1,6 @@
 import datetime as dt
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -34,6 +34,7 @@ class TestPlanPlatform(Base):
 
 class Build(Base, TimestampMixin):
     __tablename__ = "builds"
+    __table_args__ = (UniqueConstraint("plan_id", "name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("test_plans.id"), index=True)
     name: Mapped[str] = mapped_column(String(256))

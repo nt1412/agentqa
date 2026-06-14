@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -6,6 +6,7 @@ from app.models.base import Base, TimestampMixin
 
 class TestCase(Base, TimestampMixin):
     __tablename__ = "test_cases"
+    __table_args__ = (UniqueConstraint("project_id", "external_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     suite_id: Mapped[int] = mapped_column(ForeignKey("test_suites.id"), index=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)

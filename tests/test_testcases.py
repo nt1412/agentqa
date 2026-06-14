@@ -76,6 +76,47 @@ async def test_search_test_cases(session):
 
 
 @pytest.mark.asyncio
+async def test_create_version_clones_steps_and_carries_duration(session):
+    p, s = await _project_and_suite(session, "TC6")
+    tc = await testcases.create_test_case(
+        session,
+        s.id,
+        TestCaseCreate(name="v", estimated_duration=120, steps=[StepIn(action="a1")]),
+    )
+    # no steps override -> clone copies the latest version's steps
+    v2 = await testcases.create_version(session, tc.id, VersionCreate(summary="upd"))
+    assert v2.estimated_duration == 120
+    assert [st.action for st in v2.steps] == ["a1"]
+    assert v2.steps[0].step_number == 1
+
+
+@pytest.mark.asyncio
+async def test_create_version_endpoint(client, auth_headers):
+    pc = await client.post(
+        "/api/v1/projects", json={"name": "VE", "prefix": "VEP"}, headers=auth_headers
+    )
+    pid = pc.json()["id"]
+    sc = await client.post(
+        f"/api/v1/projects/{pid}/suites", json={"name": "S"}, headers=auth_headers
+    )
+    cc = await client.post(
+        f"/api/v1/suites/{sc.json()['id']}/cases",
+        json={"name": "c", "steps": [{"action": "step one"}]},
+        headers=auth_headers,
+    )
+    cid = cc.json()["id"]
+    resp = await client.post(
+        f"/api/v1/cases/{cid}/versions",
+        json={"summary": "v2 summary"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["version"] == 2
+    assert body["steps"][0]["action"] == "step one"
+
+
+@pytest.mark.asyncio
 async def test_endpoints(client, auth_headers):
     pc = await client.post(
         "/api/v1/projects", json={"name": "E", "prefix": "TCE"}, headers=auth_headers

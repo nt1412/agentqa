@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
     s3_bucket: str = "agentqa-artifacts"
+    environment: str = "dev"
 
 
 @lru_cache
