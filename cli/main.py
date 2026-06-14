@@ -14,6 +14,8 @@ plan_app = typer.Typer(help="Manage test plans")
 build_app = typer.Typer(help="Manage builds")
 milestone_app = typer.Typer(help="Manage milestones")
 assign_app = typer.Typer(help="Manage assignments")
+evidence_app = typer.Typer(help="Evidence & artifacts")
+claim_app = typer.Typer(help="Claims & verification")
 app.add_typer(project_app, name="project")
 app.add_typer(suite_app, name="suite")
 app.add_typer(case_app, name="case")
@@ -22,6 +24,8 @@ app.add_typer(plan_app, name="plan")
 app.add_typer(build_app, name="build")
 app.add_typer(milestone_app, name="milestone")
 app.add_typer(assign_app, name="assign")
+app.add_typer(evidence_app, name="evidence")
+app.add_typer(claim_app, name="claim")
 
 
 def _request(method: str, path: str, *, json_body=None, params=None) -> dict:
@@ -188,6 +192,22 @@ def assign_list(
     if assignee is not None:
         params["assignee_id"] = assignee
     _print(_request("GET", "/api/v1/assignments", params=params))
+
+
+@evidence_app.command("bundle")
+def evidence_bundle(case_id: int):
+    _print(_request("GET", f"/api/v1/cases/{case_id}/evidence"))
+
+
+@claim_app.command("unverified")
+def claim_unverified(plan: int = typer.Option(None, "--plan")):
+    params = {"plan_id": plan} if plan is not None else None
+    _print(_request("GET", "/api/v1/claims/unverified", params=params))
+
+
+@claim_app.command("verify")
+def claim_verify(claim_id: int, verdict: str = typer.Option(..., "--verdict")):
+    _print(_request("POST", f"/api/v1/claims/{claim_id}/verify", json_body={"verdict": verdict}))
 
 
 if __name__ == "__main__":

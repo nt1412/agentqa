@@ -80,3 +80,12 @@ def test_assign_create_invokes_post(monkeypatch):
     assert result.exit_code == 0
     assert calls[0][1] == "/api/v1/assignments"
     assert calls[0][2]["json_body"]["assignee_id"] == 9
+
+
+def test_claim_verify_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 1})
+    result = runner.invoke(cli.app, ["claim", "verify", "5", "--verdict", "confirmed"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/claims/5/verify"
+    assert calls[0][2]["json_body"]["verdict"] == "confirmed"

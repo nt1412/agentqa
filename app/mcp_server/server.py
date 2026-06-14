@@ -5,6 +5,7 @@ Phase 1 implements the 6 entity-backed tools; the rest are registered as
 explicit stubs raising NotImplementedError until their phase lands.
 """
 
+import base64
 from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
@@ -12,7 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from app.db import SessionLocal
 from app.schemas.execution import ExecutionCreate, StepResultIn
 from app.schemas.testcase import StepIn, TestCaseCreate
-from app.services import assignments, executions, suites, testcases
+from app.services import assignments, evidence, executions, suites, testcases
 
 mcp = FastMCP("agentqa")
 
@@ -156,8 +157,14 @@ async def record_test_run(
     step_results: list[dict] | None = None,
     notes: str | None = None,
     session_id: str | None = None,
+    claims: list[str] | None = None,
+    reasoning: dict | None = None,
 ) -> dict:
-    """Record an execution result. Build is upserted by (plan, build_name)."""
+    """Record an execution result. Build is upserted by (plan, build_name).
+
+    Optionally attach claims (assertions the agent is proving) and a reasoning
+    blob (its chain-of-thought), persisted as evidence for later verification.
+    """
     async with _session() as s:
         ex = await executions.record_execution(
             s,
@@ -170,6 +177,8 @@ async def record_test_run(
                 step_results=[StepResultIn(**sr) for sr in (step_results or [])],
                 notes=notes,
                 session_id=session_id,
+                claims=claims or [],
+                reasoning=reasoning,
             ),
             tester_id=None,  # MCP callers are agents
         )
@@ -232,20 +241,124 @@ async def list_assignments(
         ]
 
 
+# ---------- Phase 2b: evidence & provenance tools ----------
+
+
+@mcp.tool()
+async def upload_artifact(
+    execution_id: int,
+    artifact_type: str,
+    title: str,
+    content_base64: str,
+    mime_type: str | None = None,
+) -> dict:
+    """Upload a base64-encoded artifact (trace/log/screenshot/dump) for an execution."""
+    async with _session() as s:
+        art = await evidence.upload_artifact(
+            s,
+            execution_id,
+            artifact_type,
+            title,
+            base64.b64decode(content_base64),
+            mime_type,
+        )
+        return {"id": art.id, "artifact_type": art.artifact_type, "blob_key": art.blob_key}
+
+
+@mcp.tool()
+async def list_unverified_claims(
+    project_id: int | None = None, plan_id: int | None = None
+) -> list[dict]:
+    """Claims awaiting verification — audit agents poll this."""
+    async with _session() as s:
+        rows = await evidence.list_unverified_claims(s, project_id, plan_id)
+        return [
+            {"id": c.id, "execution_id": c.execution_id, "claim_text": c.claim_text} for c in rows
+        ]
+
+
+@mcp.tool()
+async def verify_claim(
+    claim_id: int, verdict: str, auditor_id: int, reasoning: dict | None = None
+) -> dict:
+    """Submit a verdict (confirmed|refuted|inconclusive) for a claim."""
+    from app.schemas.evidence import VerificationCreate
+
+    async with _session() as s:
+        v = await evidence.verify_claim(
+            s,
+            claim_id,
+            VerificationCreate(verdict=verdict, reasoning=reasoning),
+            auditor_id=auditor_id,
+        )
+        return {"id": v.id, "claim_id": v.claim_id, "verdict": v.verdict}
+
+
+@mcp.tool()
+async def create_audit_report(
+    entity_type: str,
+    entity_id: int,
+    auditor_id: int,
+    findings: dict | None = None,
+    quality_score: int | None = None,
+) -> dict:
+    """File an audit report against a case_version|suite|plan."""
+    from app.schemas.evidence import AuditReportCreate
+
+    async with _session() as s:
+        r = await evidence.create_audit_report(
+            s,
+            AuditReportCreate(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                findings=findings,
+                quality_score=quality_score,
+            ),
+            auditor_id=auditor_id,
+        )
+        return {"id": r.id, "entity_type": r.entity_type, "quality_score": r.quality_score}
+
+
+@mcp.tool()
+async def evaluate_test_case(case_version_id: int) -> dict:
+    """Return a test case version's shape + execution stats for quality assessment."""
+    async with _session() as s:
+        ev = await evidence.evaluate_test_case(s, case_version_id)
+        return ev.model_dump()
+
+
+@mcp.tool()
+async def get_execution_evidence(case_id: int) -> dict:
+    """Full evidence bundle for a case: executions with claims + artifacts."""
+    async with _session() as s:
+        bundle = await evidence.get_execution_evidence(s, case_id)
+        return bundle.model_dump(mode="json")
+
+
+@mcp.tool()
+async def get_agent_execution_history(agent_id: int, project_id: int | None = None) -> list[dict]:
+    """All executions recorded by a given agent — supervision/pattern analysis."""
+    async with _session() as s:
+        rows = await evidence.get_agent_execution_history(s, agent_id, project_id)
+        return [
+            {
+                "id": e.id,
+                "version_id": e.version_id,
+                "status": e.status,
+                "plan_id": e.plan_id,
+                "build_id": e.build_id,
+            }
+            for e in rows
+        ]
+
+
 # ---------- Deferred tools (registered, bodies land in later phases) ----------
 
 _DEFERRED = [
     "get_failure_context",
     "search_similar_failures",
-    "get_agent_execution_history",
-    "get_execution_evidence",
-    "list_unverified_claims",
-    "verify_claim",
-    "evaluate_test_case",
-    "create_audit_report",
     "get_coverage_gaps",
     "create_requirement",
-    "upload_artifact",
 ]
 
 
