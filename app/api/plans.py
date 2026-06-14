@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, SessionDep
-from app.schemas.plan import PlanCreate, PlanOut, PlanUpdate
+from app.schemas.plan import PlanCaseAdd, PlanCaseOut, PlanCreate, PlanOut, PlanUpdate
 from app.services import plans
 
 router = APIRouter(prefix="/api/v1", tags=["plans"])
@@ -27,3 +27,17 @@ async def get_one(plan_id: int, session: SessionDep, user: CurrentUser):
 @router.put("/plans/{plan_id}", response_model=PlanOut)
 async def update(plan_id: int, body: PlanUpdate, session: SessionDep, user: CurrentUser):
     return await plans.update_plan(session, plan_id, body)
+
+
+@router.post(
+    "/plans/{plan_id}/cases",
+    response_model=list[PlanCaseOut],
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_cases(plan_id: int, body: PlanCaseAdd, session: SessionDep, user: CurrentUser):
+    return await plans.add_cases(session, plan_id, body.case_ids, body.platform_id, body.urgency)
+
+
+@router.get("/plans/{plan_id}/cases", response_model=list[PlanCaseOut])
+async def list_cases(plan_id: int, session: SessionDep, user: CurrentUser):
+    return await plans.list_plan_cases(session, plan_id)

@@ -22,3 +22,19 @@ class PlanOut(BaseModel):
     is_open: bool
 
     model_config = {"from_attributes": True}
+
+
+class PlanCaseAdd(BaseModel):
+    case_ids: list[int]
+    platform_id: int | None = None
+    urgency: int = 2
+
+
+class PlanCaseOut(BaseModel):
+    id: int
+    plan_id: int
+    version_id: int
+    platform_id: int | None
+    urgency: int
+
+    model_config = {"from_attributes": True}
