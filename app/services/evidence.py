@@ -2,7 +2,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import storage
-from app.models.evidence import ExecutionArtifact, ExecutionClaim, ExecutionReasoning
+from app.models.evidence import (
+    ClaimVerification,
+    ExecutionArtifact,
+    ExecutionClaim,
+    ExecutionReasoning,
+)
 from app.models.execution import Execution
 from app.services.errors import NotFound
 
@@ -66,5 +71,47 @@ async def list_artifacts(session: AsyncSession, execution_id: int) -> list[Execu
         select(ExecutionArtifact)
         .where(ExecutionArtifact.execution_id == execution_id)
         .order_by(ExecutionArtifact.id)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def list_unverified_claims(
+    session: AsyncSession, project_id: int | None = None, plan_id: int | None = None
+) -> list[ExecutionClaim]:
+    """Claims with zero verifications. Optional project/plan scoping via executions."""
+    verified_subq = select(ClaimVerification.claim_id).distinct()
+    stmt = select(ExecutionClaim).where(ExecutionClaim.id.not_in(verified_subq))
+    if project_id is not None or plan_id is not None:
+        stmt = stmt.join(Execution, Execution.id == ExecutionClaim.execution_id)
+        if plan_id is not None:
+            stmt = stmt.where(Execution.plan_id == plan_id)
+        # project scoping resolves through the plan; left to plan_id for Phase 2b
+    stmt = stmt.order_by(ExecutionClaim.id)
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def verify_claim(
+    session: AsyncSession, claim_id: int, data, auditor_id: int
+) -> ClaimVerification:
+    claim = await session.get(ExecutionClaim, claim_id)
+    if claim is None:
+        raise NotFound(f"claim {claim_id} not found")
+    verification = ClaimVerification(
+        claim_id=claim_id,
+        auditor_id=auditor_id,
+        verdict=data.verdict,
+        reasoning=data.reasoning,
+    )
+    session.add(verification)
+    await session.commit()
+    await session.refresh(verification)
+    return verification
+
+
+async def list_verifications(session: AsyncSession, claim_id: int) -> list[ClaimVerification]:
+    stmt = (
+        select(ClaimVerification)
+        .where(ClaimVerification.claim_id == claim_id)
+        .order_by(ClaimVerification.id)
     )
     return list((await session.execute(stmt)).scalars().all())

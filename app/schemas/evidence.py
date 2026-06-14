@@ -1,3 +1,5 @@
+import datetime as dt
+
 from pydantic import BaseModel
 
 
@@ -9,5 +11,31 @@ class ArtifactOut(BaseModel):
     blob_key: str
     size: int | None = None
     mime_type: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ClaimOut(BaseModel):
+    id: int
+    execution_id: int
+    claim_text: str
+    created_at: dt.datetime
+    verification_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class VerificationCreate(BaseModel):
+    verdict: str  # confirmed|refuted|inconclusive
+    reasoning: dict | None = None
+
+
+class VerificationOut(BaseModel):
+    id: int
+    claim_id: int
+    auditor_id: int
+    verdict: str
+    reasoning: dict | None = None
+    created_at: dt.datetime
 
     model_config = {"from_attributes": True}
