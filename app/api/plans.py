@@ -4,13 +4,15 @@ from app.api.deps import CurrentUser, SessionDep
 from app.schemas.plan import (
     BuildCreate,
     BuildOut,
+    MilestoneCreate,
+    MilestoneOut,
     PlanCaseAdd,
     PlanCaseOut,
     PlanCreate,
     PlanOut,
     PlanUpdate,
 )
-from app.services import builds, plans
+from app.services import builds, milestones, plans
 
 router = APIRouter(prefix="/api/v1", tags=["plans"])
 
@@ -61,3 +63,19 @@ async def create_build(plan_id: int, body: BuildCreate, session: SessionDep, use
 @router.get("/plans/{plan_id}/builds", response_model=list[BuildOut])
 async def list_builds(plan_id: int, session: SessionDep, user: CurrentUser):
     return await builds.list_builds(session, plan_id)
+
+
+@router.post(
+    "/plans/{plan_id}/milestones",
+    response_model=MilestoneOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_milestone(
+    plan_id: int, body: MilestoneCreate, session: SessionDep, user: CurrentUser
+):
+    return await milestones.create_milestone(session, plan_id, body)
+
+
+@router.get("/plans/{plan_id}/milestones", response_model=list[MilestoneOut])
+async def list_milestones(plan_id: int, session: SessionDep, user: CurrentUser):
+    return await milestones.list_milestones(session, plan_id)

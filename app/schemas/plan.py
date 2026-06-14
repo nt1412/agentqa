@@ -1,3 +1,5 @@
+import datetime as dt
+
 from pydantic import BaseModel
 
 
@@ -57,5 +59,21 @@ class BuildOut(BaseModel):
     branch: str | None = None
     commit_id: str | None = None
     active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class MilestoneCreate(BaseModel):
+    name: str
+    target_date: dt.datetime | None = None
+    start_date: dt.datetime | None = None
+
+
+class MilestoneOut(BaseModel):
+    id: int
+    plan_id: int
+    name: str
+    target_date: dt.datetime | None = None
+    start_date: dt.datetime | None = None
 
     model_config = {"from_attributes": True}
