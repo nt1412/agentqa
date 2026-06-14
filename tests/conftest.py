@@ -32,6 +32,7 @@ async def _create_test_db():
 async def engine(_create_test_db):
     eng = create_async_engine(TEST_DB_URL)
     async with eng.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
     yield eng
     await eng.dispose()

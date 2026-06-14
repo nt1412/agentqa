@@ -1,5 +1,6 @@
 import datetime as dt
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,7 +50,7 @@ class ExecutionReasoning(Base):
     agent_model: Mapped[str | None] = mapped_column(String(128))
     agent_session_id: Mapped[str | None] = mapped_column(String(128))
     token_count: Mapped[int | None] = mapped_column(Integer)
-    # NOTE: embedding column (pgvector) added in Phase 2 migration
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
 
 
 class AuditReport(Base):
