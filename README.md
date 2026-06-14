@@ -46,3 +46,13 @@ python -m app.mcp_server.server   # stdio transport
 ```bash
 pytest -v
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: logic lives in the
+transport-agnostic service layer (`app/services/`), changes are test-driven,
+and `ruff check .` must pass.
+
+## License
+
+[Apache License 2.0](LICENSE) © 2026 Nishant Tiwari.

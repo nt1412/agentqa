@@ -1,7 +1,20 @@
 [project]
 name = "agentqa"
 version = "0.1.0"
+description = "Test management for agentic coding — a TestLink-equivalent evidence and context store for AI QA teams, with a REST API, MCP server, and CLI."
+readme = "README.md"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Nishant Tiwari" }]
+keywords = ["testing", "test-management", "qa", "mcp", "agents", "testlink"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
@@ -31,6 +44,11 @@ embeddings = [
     "sentence-transformers>=3.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/nt1412/agentqa"
+Repository = "https://github.com/nt1412/agentqa"
+Issues = "https://github.com/nt1412/agentqa/issues"
+
 [project.scripts]
 agentqa = "cli.main:app"
 
@@ -46,6 +64,8 @@ python_classes = ["Check"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Alembic-generated migrations are not hand-maintained; don't lint them.
+extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
