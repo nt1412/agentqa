@@ -10,8 +10,13 @@ from app.models.evidence import (
     ExecutionReasoning,
 )
 from app.models.execution import Execution
-from app.models.testcase import TestCaseVersion, TestStep
-from app.schemas.evidence import CaseEvaluation
+from app.models.testcase import TestCase, TestCaseVersion, TestStep
+from app.schemas.evidence import (
+    ArtifactOut,
+    CaseEvaluation,
+    EvidenceBundle,
+    EvidenceExecution,
+)
 from app.services.errors import NotFound
 
 
@@ -157,3 +162,68 @@ async def evaluate_test_case(session: AsyncSession, case_version_id: int) -> Cas
         execution_count=len(executions_for_version),
         last_status=executions_for_version[0].status if executions_for_version else None,
     )
+
+
+async def get_execution_evidence(session: AsyncSession, case_id: int) -> EvidenceBundle:
+    case = await session.get(TestCase, case_id)
+    if case is None:
+        raise NotFound(f"test case {case_id} not found")
+    version_ids = (
+        (
+            await session.execute(
+                select(TestCaseVersion.id).where(TestCaseVersion.case_id == case_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    bundle = EvidenceBundle(case_id=case_id, executions=[])
+    if not version_ids:
+        return bundle
+    exec_rows = (
+        (
+            await session.execute(
+                select(Execution)
+                .where(Execution.version_id.in_(version_ids))
+                .order_by(Execution.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for ex in exec_rows:
+        claim_texts = (
+            (
+                await session.execute(
+                    select(ExecutionClaim.claim_text).where(ExecutionClaim.execution_id == ex.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        artifacts = await list_artifacts(session, ex.id)
+        bundle.executions.append(
+            EvidenceExecution(
+                id=ex.id,
+                status=ex.status,
+                build_id=ex.build_id,
+                created_at=ex.created_at,
+                claims=list(claim_texts),
+                artifacts=[ArtifactOut.model_validate(a) for a in artifacts],
+            )
+        )
+    return bundle
+
+
+async def get_agent_execution_history(
+    session: AsyncSession, agent_id: int, project_id: int | None = None
+) -> list[Execution]:
+    stmt = select(Execution).where(Execution.tester_id == agent_id)
+    if project_id is not None:
+        stmt = (
+            stmt.join(TestCaseVersion, TestCaseVersion.id == Execution.version_id)
+            .join(TestCase, TestCase.id == TestCaseVersion.case_id)
+            .where(TestCase.project_id == project_id)
+        )
+    stmt = stmt.order_by(Execution.created_at.desc())
+    return list((await session.execute(stmt)).scalars().all())

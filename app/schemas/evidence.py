@@ -67,3 +67,30 @@ class CaseEvaluation(BaseModel):
     step_count: int
     execution_count: int
     last_status: str | None = None
+
+
+class EvidenceExecution(BaseModel):
+    id: int
+    status: str
+    build_id: int | None = None
+    created_at: dt.datetime
+    claims: list[str] = []
+    artifacts: list[ArtifactOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class EvidenceBundle(BaseModel):
+    case_id: int
+    executions: list[EvidenceExecution] = []
+
+
+class AgentExecutionOut(BaseModel):
+    id: int
+    version_id: int
+    status: str
+    plan_id: int | None = None
+    build_id: int | None = None
+    created_at: dt.datetime
+
+    model_config = {"from_attributes": True}

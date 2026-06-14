@@ -5,11 +5,13 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, SessionDep
 from app.schemas.evidence import (
+    AgentExecutionOut,
     ArtifactOut,
     AuditReportCreate,
     AuditReportOut,
     CaseEvaluation,
     ClaimOut,
+    EvidenceBundle,
     VerificationCreate,
     VerificationOut,
 )
@@ -71,3 +73,15 @@ async def create_audit_report(body: AuditReportCreate, session: SessionDep, user
 @router.get("/case-versions/{case_version_id}/evaluation", response_model=CaseEvaluation)
 async def evaluate(case_version_id: int, session: SessionDep, user: CurrentUser):
     return await evidence.evaluate_test_case(session, case_version_id)
+
+
+@router.get("/cases/{case_id}/evidence", response_model=EvidenceBundle)
+async def case_evidence(case_id: int, session: SessionDep, user: CurrentUser):
+    return await evidence.get_execution_evidence(session, case_id)
+
+
+@router.get("/agents/{agent_id}/executions", response_model=list[AgentExecutionOut])
+async def agent_history(
+    agent_id: int, session: SessionDep, user: CurrentUser, project_id: int | None = None
+):
+    return await evidence.get_agent_execution_history(session, agent_id, project_id)
