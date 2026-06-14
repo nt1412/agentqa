@@ -25,6 +25,10 @@ from app.schemas.evidence import (
 )
 from app.services.errors import NotFound
 
+# Statuses that count as failures for the self-correction loop (similar-failure
+# search + failure-context recent executions). Passing runs are excluded.
+_FAILURE_STATUSES = ("fail", "blocked")
+
 
 async def record_claims_and_reasoning(
     session: AsyncSession,
@@ -261,7 +265,8 @@ async def get_agent_execution_history(
 async def search_similar_failures(
     session: AsyncSession, case_id: int, n: int = 5
 ) -> list[SimilarFailure]:
-    # query vector = most recent embedded execution for this case
+    # query vector = most recent embedded FAILURE for this case (anchor on a failure,
+    # not a pass — this loop is about finding similar failures to learn from)
     q = (
         select(ExecutionReasoning.embedding)
         .select_from(ExecutionReasoning)
@@ -270,6 +275,7 @@ async def search_similar_failures(
         .where(
             TestCaseVersion.case_id == case_id,
             ExecutionReasoning.embedding.is_not(None),
+            Execution.status.in_(_FAILURE_STATUSES),
         )
         .order_by(Execution.created_at.desc())
         .limit(1)
@@ -287,6 +293,7 @@ async def search_similar_failures(
         .where(
             ExecutionReasoning.embedding.is_not(None),
             TestCaseVersion.case_id != case_id,
+            Execution.status.in_(_FAILURE_STATUSES),
         )
         .order_by(distance)
         .limit(n)
@@ -322,7 +329,10 @@ async def get_failure_context(
 
     exec_stmt = (
         select(Execution)
-        .where(Execution.version_id.in_(version_ids))
+        .where(
+            Execution.version_id.in_(version_ids),
+            Execution.status.in_(_FAILURE_STATUSES),
+        )
         .order_by(Execution.created_at.desc())
         .limit(last_n)
     )

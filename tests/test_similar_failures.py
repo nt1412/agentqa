@@ -60,3 +60,26 @@ async def test_similar_failures_empty_when_no_embedding(session):
         tester_id=None,
     )
     assert await evidence.search_similar_failures(session, a_tc.id) == []
+
+
+@pytest.mark.asyncio
+async def test_similar_failures_excludes_passing_executions(session):
+    # Regression (Phase 2c review I-1): a PASSING execution with identical reasoning
+    # must NOT be returned as a "similar failure".
+    a_tc, a_plan = await _case(session, "SF5", "a")
+    b_tc, b_plan = await _case(session, "SF6", "b")
+    await _fail(session, a_tc, a_plan, "shared boom text")
+    # case B records the SAME reasoning text but PASSES -> must be excluded
+    await executions.record_execution(
+        session,
+        ExecutionCreate(
+            case_id=b_tc.id,
+            plan_id=b_plan.id,
+            build_name="b",
+            status="pass",
+            notes="shared boom text",
+        ),
+        tester_id=None,
+    )
+    results = await evidence.search_similar_failures(session, a_tc.id)
+    assert all(r.case_id != b_tc.id for r in results)

@@ -55,3 +55,25 @@ async def test_failure_context_bundle(session):
 async def test_failure_context_unknown_case(session):
     with pytest.raises(NotFound):
         await evidence.get_failure_context(session, 999999)
+
+
+@pytest.mark.asyncio
+async def test_failure_context_excludes_passing_executions(session):
+    # Regression (Phase 2c review I-1): recent_executions must contain only failures.
+    p = await projects.create_project(session, ProjectCreate(name="P", prefix="FC2"))
+    s = await suites.create_suite(session, p.id, SuiteCreate(name="S"))
+    tc = await testcases.create_test_case(session, s.id, TestCaseCreate(name="c"))
+    plan = await plans.create_plan(session, p.id, PlanCreate(name="Plan"))
+    await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=tc.id, plan_id=plan.id, build_name="b", status="pass", notes="ok"),
+        tester_id=None,
+    )
+    await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=tc.id, plan_id=plan.id, build_name="b", status="fail", notes="bad"),
+        tester_id=None,
+    )
+    ctx = await evidence.get_failure_context(session, tc.id)
+    assert len(ctx.recent_executions) == 1
+    assert ctx.recent_executions[0].status == "fail"
