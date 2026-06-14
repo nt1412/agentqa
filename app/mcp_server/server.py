@@ -13,7 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from app.db import SessionLocal
 from app.schemas.execution import ExecutionCreate, StepResultIn
 from app.schemas.testcase import StepIn, TestCaseCreate
-from app.services import assignments, evidence, executions, suites, testcases
+from app.services import assignments, evidence, executions, requirements, suites, testcases
 
 mcp = FastMCP("agentqa")
 
@@ -374,12 +374,45 @@ async def search_similar_failures(case_id: int, n: int = 5) -> list[dict]:
         return [r.model_dump() for r in rows]
 
 
+# ---------- Phase 2d: requirements & coverage tools ----------
+
+
+@mcp.tool()
+async def create_requirement(
+    spec_id: int,
+    req_doc_id: str,
+    name: str,
+    scope: str | None = None,
+    link_to_cases: list[int] | None = None,
+) -> dict:
+    """Create a requirement (+v1) under a spec, optionally linking it to test cases."""
+    from app.schemas.requirement import RequirementCreate
+
+    async with _session() as s:
+        out = await requirements.create_requirement(
+            s,
+            spec_id,
+            RequirementCreate(
+                req_doc_id=req_doc_id,
+                name=name,
+                scope=scope,
+                link_to_cases=link_to_cases or [],
+            ),
+        )
+        return {"id": out.id, "req_doc_id": out.req_doc_id, "name": out.name}
+
+
+@mcp.tool()
+async def get_coverage_gaps(project_id: int, spec_id: int | None = None) -> list[dict]:
+    """Requirements with no active test coverage — gap analysis."""
+    async with _session() as s:
+        gaps = await requirements.get_coverage_gaps(s, project_id, spec_id)
+        return [g.model_dump() for g in gaps]
+
+
 # ---------- Deferred tools (registered, bodies land in later phases) ----------
 
-_DEFERRED = [
-    "get_coverage_gaps",
-    "create_requirement",
-]
+_DEFERRED = []
 
 
 def _make_stub(tool_name: str):

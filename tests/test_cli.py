@@ -97,3 +97,11 @@ def test_context_failure_invokes_get(monkeypatch):
     result = runner.invoke(cli.app, ["context", "failure", "7"])
     assert result.exit_code == 0
     assert calls[0][1] == "/api/v1/cases/7/failure-context"
+
+
+def test_req_gaps_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])
+    result = runner.invoke(cli.app, ["req", "gaps", "3"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/projects/3/coverage-gaps"

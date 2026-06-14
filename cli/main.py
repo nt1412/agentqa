@@ -17,6 +17,7 @@ assign_app = typer.Typer(help="Manage assignments")
 evidence_app = typer.Typer(help="Evidence & artifacts")
 claim_app = typer.Typer(help="Claims & verification")
 context_app = typer.Typer(help="Self-correction context")
+req_app = typer.Typer(help="Requirements & coverage")
 app.add_typer(project_app, name="project")
 app.add_typer(suite_app, name="suite")
 app.add_typer(case_app, name="case")
@@ -28,6 +29,7 @@ app.add_typer(assign_app, name="assign")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(claim_app, name="claim")
 app.add_typer(context_app, name="context")
+app.add_typer(req_app, name="req")
 
 
 def _request(method: str, path: str, *, json_body=None, params=None) -> dict:
@@ -221,6 +223,46 @@ def context_failure(case_id: int, plan: int = typer.Option(None, "--plan")):
 @context_app.command("similar")
 def context_similar(case_id: int, n: int = typer.Option(5, "--n")):
     _print(_request("GET", f"/api/v1/cases/{case_id}/similar-failures", params={"n": n}))
+
+
+@req_app.command("spec-create")
+def req_spec_create(
+    project_id: int,
+    doc_id: str = typer.Option(..., "--doc-id"),
+    name: str = typer.Option(..., "--name"),
+):
+    _print(
+        _request(
+            "POST",
+            f"/api/v1/projects/{project_id}/req-specs",
+            json_body={"doc_id": doc_id, "name": name},
+        )
+    )
+
+
+@req_app.command("create")
+def req_create(
+    spec_id: int,
+    doc_id: str = typer.Option(..., "--doc-id"),
+    name: str = typer.Option(..., "--name"),
+):
+    _print(
+        _request(
+            "POST",
+            f"/api/v1/req-specs/{spec_id}/requirements",
+            json_body={"req_doc_id": doc_id, "name": name},
+        )
+    )
+
+
+@req_app.command("gaps")
+def req_gaps(project_id: int):
+    _print(_request("GET", f"/api/v1/projects/{project_id}/coverage-gaps"))
+
+
+@req_app.command("traceability")
+def req_traceability(project_id: int):
+    _print(_request("GET", f"/api/v1/projects/{project_id}/traceability"))
 
 
 if __name__ == "__main__":
