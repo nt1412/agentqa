@@ -101,3 +101,25 @@ class SimilarFailure(BaseModel):
     case_id: int
     status: str
     distance: float
+
+
+class StepFailure(BaseModel):
+    step_id: int
+    status: str
+    notes: str | None = None
+
+
+class FailureExecution(BaseModel):
+    execution_id: int
+    status: str
+    notes: str | None = None
+    step_failures: list[StepFailure] = []
+
+
+class FailureContext(BaseModel):
+    case_id: int
+    case_name: str
+    recent_executions: list[FailureExecution] = []
+    prior_reasoning: list[dict] = []
+    artifacts: list[ArtifactOut] = []
+    similar_failures: list[SimilarFailure] = []

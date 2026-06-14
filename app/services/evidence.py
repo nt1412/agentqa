@@ -11,14 +11,17 @@ from app.models.evidence import (
     ExecutionClaim,
     ExecutionReasoning,
 )
-from app.models.execution import Execution
+from app.models.execution import Execution, ExecutionStep
 from app.models.testcase import TestCase, TestCaseVersion, TestStep
 from app.schemas.evidence import (
     ArtifactOut,
     CaseEvaluation,
     EvidenceBundle,
     EvidenceExecution,
+    FailureContext,
+    FailureExecution,
     SimilarFailure,
+    StepFailure,
 )
 from app.services.errors import NotFound
 
@@ -295,3 +298,84 @@ async def search_similar_failures(
         )
         for r in rows
     ]
+
+
+async def get_failure_context(
+    session: AsyncSession, case_id: int, plan_id: int | None = None, last_n: int = 5
+) -> FailureContext:
+    case = await session.get(TestCase, case_id)
+    if case is None:
+        raise NotFound(f"test case {case_id} not found")
+    version_ids = (
+        (
+            await session.execute(
+                select(TestCaseVersion.id).where(TestCaseVersion.case_id == case_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    ctx = FailureContext(case_id=case_id, case_name=case.name)
+    if not version_ids:
+        return ctx
+
+    exec_stmt = (
+        select(Execution)
+        .where(Execution.version_id.in_(version_ids))
+        .order_by(Execution.created_at.desc())
+        .limit(last_n)
+    )
+    if plan_id is not None:
+        exec_stmt = exec_stmt.where(Execution.plan_id == plan_id)
+    exec_rows = list((await session.execute(exec_stmt)).scalars().all())
+
+    for ex in exec_rows:
+        step_fail_rows = (
+            (
+                await session.execute(
+                    select(ExecutionStep)
+                    .where(
+                        ExecutionStep.execution_id == ex.id,
+                        ExecutionStep.status.in_(["fail", "blocked"]),
+                    )
+                    .order_by(ExecutionStep.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ctx.recent_executions.append(
+            FailureExecution(
+                execution_id=ex.id,
+                status=ex.status,
+                notes=ex.notes,
+                step_failures=[
+                    StepFailure(step_id=sf.step_id, status=sf.status, notes=sf.notes)
+                    for sf in step_fail_rows
+                ],
+            )
+        )
+        for art in await list_artifacts(session, ex.id):
+            ctx.artifacts.append(ArtifactOut.model_validate(art))
+
+    reasoning_rows = (
+        (
+            await session.execute(
+                select(ExecutionReasoning.reasoning)
+                .join(Execution, Execution.id == ExecutionReasoning.execution_id)
+                .where(
+                    Execution.version_id.in_(version_ids),
+                    ExecutionReasoning.reasoning.is_not(None),
+                )
+                .order_by(Execution.created_at.desc())
+                .limit(last_n)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ctx.prior_reasoning = [r for r in reasoning_rows if r is not None]
+
+    ctx.similar_failures = await search_similar_failures(session, case_id, n=last_n)
+    return ctx
