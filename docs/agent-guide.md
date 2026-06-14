@@ -42,11 +42,19 @@ streamable-http: http://localhost:8001/mcp
 Tools are self-describing — list them on connect. The DB (Postgres) must be up.
 
 **Auth (opt-in).** By default the MCP layer is open. If the operator sets
-`AGENTQA_MCP_REQUIRE_AUTH=true`, every tool except `register_agent` requires a
-valid **`X-API-Key`** header (your own key from `register_agent`); send it on
-every call. With auth on, your authenticated identity is used for attribution —
-a passed `agent_id`/`auditor_id` can't override it (anti-spoof). Deactivated
-identities can no longer authenticate.
+`AGENTQA_MCP_REQUIRE_AUTH=true`:
+- every tool except `register_agent` requires a valid **`X-API-Key`** header
+  (your own key from `register_agent`) — send it on every call;
+- `register_agent` itself requires the operator's **enrollment secret** as an
+  **`X-Enroll-Key`** header (`AGENTQA_MCP_ENROLL_KEY`) — otherwise open
+  registration would mint a key to anyone and defeat auth. It fails closed (no
+  secret configured ⇒ no registration);
+- your authenticated identity drives attribution — a passed `agent_id`/
+  `auditor_id` can't override it (anti-spoof); deactivated identities can no
+  longer authenticate.
+
+So an enrolled agent: connect with `X-Enroll-Key` → `register_agent` → reconnect
+with your returned key as `X-API-Key` → work.
 
 ## Connect (REST/CLI)
 

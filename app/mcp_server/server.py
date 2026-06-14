@@ -54,13 +54,18 @@ def _auth_enabled() -> bool:
     )
 
 
-def _request_api_key() -> str | None:
-    """The X-API-Key (or Bearer token) on the current MCP request, if any."""
+def _request_headers():
+    """Headers on the current MCP request, or None outside a request."""
     try:
         req = request_ctx.get().request
     except LookupError:
         return None
-    headers = getattr(req, "headers", None)
+    return getattr(req, "headers", None)
+
+
+def _request_api_key() -> str | None:
+    """The X-API-Key (or Bearer token) on the current MCP request, if any."""
+    headers = _request_headers()
     if headers is None:
         return None
     key = headers.get("x-api-key")
@@ -69,6 +74,12 @@ def _request_api_key() -> str | None:
         if authz.lower().startswith("bearer "):
             key = authz.split(" ", 1)[1].strip()
     return key or None
+
+
+def _request_enroll_key() -> str | None:
+    """The X-Enroll-Key on the current MCP request, if any."""
+    headers = _request_headers()
+    return headers.get("x-enroll-key") if headers is not None else None
 
 
 async def _current_agent(session):
@@ -100,6 +111,22 @@ def _provenance_id(passed_id):
     can't be spoofed; falls back to the passed id when auth is disabled."""
     agent = _auth_agent.get()
     return agent.id if agent is not None else passed_id
+
+
+def _check_enrollment() -> None:
+    """Gate registration when auth is enabled. register_agent must stay reachable
+    without a per-agent key (it mints one), but open registration would defeat
+    auth — anyone could mint a key and authenticate. So require a shared
+    enrollment secret (X-Enroll-Key == AGENTQA_MCP_ENROLL_KEY). Fails closed:
+    if auth is on and no enroll key is configured, registration is refused."""
+    if not _auth_enabled():
+        return
+    expected = os.environ.get("AGENTQA_MCP_ENROLL_KEY")
+    if not expected or _request_enroll_key() != expected:
+        raise AuthRequired(
+            "MCP auth is enabled — registration requires a valid X-Enroll-Key "
+            "header (the operator's enrollment secret)."
+        )
 
 
 @asynccontextmanager
@@ -144,6 +171,19 @@ def _case_dump(out) -> dict:
         "project_id": out.project_id,
         "current_version": _version_dump(out),
     }
+
+
+# ---------- Public discovery (no auth) ----------
+
+
+@mcp.tool()
+async def get_orientation() -> dict:
+    """Public landing page (no auth, no enrollment): what AgentQA is and how an
+    agent uses it. Read this to decide whether to join; register_agent then mints
+    your identity + key. Returns no secrets — just workflow docs."""
+    from app.agent_orientation import AGENT_ORIENTATION
+
+    return {"orientation": AGENT_ORIENTATION}
 
 
 # ---------- Phase 1: entity-backed tools ----------
@@ -541,7 +581,9 @@ async def register_agent(
     """
     from app.agent_orientation import AGENT_ORIENTATION
 
-    # open even when auth is enabled — this is how an agent gets its key (bootstrap)
+    # Bootstrap, but gated: when auth is enabled, require the enrollment secret —
+    # otherwise open registration would mint a valid key to anyone and defeat auth.
+    _check_enrollment()
     async with _session(require_auth=False) as s:
         user, api_key = await users.register_agent(
             s,

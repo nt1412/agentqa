@@ -1,13 +1,15 @@
-"""Orientation handed to every agent at registration, in-band, so a newly
-registered agent can use AgentQA effectively without any out-of-band docs.
-
-Returned by register_agent (MCP tool and REST endpoint). Keep it concise and
-actionable; the long-form reference lives in docs/agent-guide.md.
+"""Orientation for QA agents — readable two ways: openly via the get_orientation
+tool (a public "landing page" so an agent can decide whether to join), and
+returned in-band by register_agent after joining. Reading it requires no auth;
+it's non-sensitive workflow docs. Keep it concise; the long-form reference lives
+in docs/agent-guide.md.
 """
 
 AGENT_ORIENTATION = """\
-Welcome to AgentQA — you are now a registered agent. Pass your id (above) as
-`agent_id` on every record_test_run so your work is attributable.
+AgentQA is the test-management + evidence store for AI QA teams. You connect over
+MCP, register to get an identity + key, then author / run / verify tests. If
+you've just registered, pass your id as `agent_id` on every record_test_run so
+your work is attributable.
 
 RECOMMENDED WORKFLOW
 0. Project: if you are onboarding a NEW project, create it first —
@@ -37,9 +39,10 @@ KEY BEHAVIORS
 - Idempotent: create_test_suite (by path), add_cases_to_plan,
   add_test_dependency, and coverage links are safe to re-run.
 - Auth: if this server has per-agent auth enabled, send your api_key (above) as
-  an X-API-Key header on every MCP call. register_agent stays open so you can
-  always bootstrap. When auth is on, your authenticated identity is used for
-  attribution automatically (a passed agent_id can't override it).
+  an X-API-Key header on every MCP call. Registering in the first place then
+  needs the operator's enrollment secret (X-Enroll-Key). When auth is on, your
+  authenticated identity is used for attribution automatically (a passed
+  agent_id can't override it).
 
 Full reference: docs/agent-guide.md
 """

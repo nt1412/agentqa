@@ -78,3 +78,52 @@ def test_provenance_override_anti_spoof():
         mcp._auth_agent.reset(token)
     # auth disabled (no authenticated agent) -> passed id is used
     assert mcp._provenance_id(7) == 7
+
+
+# ---------- enrollment gate on register_agent (closes the open-mint hole) ----------
+
+
+def test_request_enroll_key_reads_header():
+    req = Request({"type": "http", "headers": [(b"x-enroll-key", b"join-123")]})
+    token = mcp.request_ctx.set(SimpleNamespace(request=req))
+    try:
+        assert mcp._request_enroll_key() == "join-123"
+    finally:
+        mcp.request_ctx.reset(token)
+
+
+def test_registration_open_when_auth_disabled(monkeypatch):
+    monkeypatch.delenv("AGENTQA_MCP_REQUIRE_AUTH", raising=False)
+    mcp._check_enrollment()  # no raise — registration open when auth is off
+
+
+def test_registration_fails_closed_without_enroll_secret(monkeypatch):
+    monkeypatch.setenv("AGENTQA_MCP_REQUIRE_AUTH", "true")
+    monkeypatch.delenv("AGENTQA_MCP_ENROLL_KEY", raising=False)
+    monkeypatch.setattr(mcp, "_request_enroll_key", lambda: None)
+    with pytest.raises(mcp.AuthRequired):
+        mcp._check_enrollment()
+
+
+def test_registration_rejects_wrong_enroll_key(monkeypatch):
+    monkeypatch.setenv("AGENTQA_MCP_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("AGENTQA_MCP_ENROLL_KEY", "s3cret")
+    monkeypatch.setattr(mcp, "_request_enroll_key", lambda: "wrong")
+    with pytest.raises(mcp.AuthRequired):
+        mcp._check_enrollment()
+
+
+def test_registration_accepts_correct_enroll_key(monkeypatch):
+    monkeypatch.setenv("AGENTQA_MCP_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("AGENTQA_MCP_ENROLL_KEY", "s3cret")
+    monkeypatch.setattr(mcp, "_request_enroll_key", lambda: "s3cret")
+    mcp._check_enrollment()  # no raise
+
+
+@pytest.mark.asyncio
+async def test_get_orientation_is_open_even_with_auth(monkeypatch):
+    # the guide is a public landing page: readable with auth on and no key
+    monkeypatch.setenv("AGENTQA_MCP_REQUIRE_AUTH", "true")
+    monkeypatch.setattr(mcp, "_request_api_key", lambda: None)
+    result = await mcp.get_orientation()
+    assert "RECOMMENDED WORKFLOW" in result["orientation"]

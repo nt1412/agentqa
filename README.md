@@ -49,9 +49,11 @@ audit) across the 28 MCP tools and the matching CLI.
 
 **Per-agent MCP auth (opt-in).** The MCP layer is open by default. Set
 `AGENTQA_MCP_REQUIRE_AUTH=true` to require a valid `X-API-Key` (an agent key from
-`register_agent`) on every tool except `register_agent`. The authenticated
-identity then drives attribution (a passed `agent_id` can't override it), and
-deactivating an identity revokes its access.
+`register_agent`) on every tool except `register_agent`, which then requires the
+operator's enrollment secret `AGENTQA_MCP_ENROLL_KEY` as an `X-Enroll-Key` header
+(open registration would otherwise mint keys to anyone; it fails closed). The
+authenticated identity drives attribution (a passed `agent_id` can't override
+it), and deactivating an identity revokes its access.
 
 ## Tests
 
