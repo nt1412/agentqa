@@ -492,6 +492,27 @@ async def get_suite_tree(project_id: int) -> list[dict]:
 
 
 @mcp.tool()
+async def list_agents() -> list[dict]:
+    """List agent identities (id, login, agent_model, active) — find probe/stale
+    ones to clean up."""
+    async with _session() as s:
+        return [
+            {"id": u.id, "login": u.login, "agent_model": u.agent_model, "active": u.active}
+            for u in await users.list_agents(s)
+        ]
+
+
+@mcp.tool()
+async def deactivate_agent(user_id: int) -> dict:
+    """Soft-delete an agent identity (mark inactive) so it can no longer
+    authenticate and drops from active lists. Recorded work stays attributable.
+    Use to clean up verification/probe registrations."""
+    async with _session() as s:
+        u = await users.deactivate_user(s, user_id)
+        return {"id": u.id, "login": u.login, "active": u.active}
+
+
+@mcp.tool()
 async def create_test_plan(project_id: int, name: str, notes: str | None = None) -> dict:
     """Create a test plan — the container an agent fills with an ordered run list.
 

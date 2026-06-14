@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.services import auth
-from app.services.errors import Conflict
+from app.services.errors import Conflict, NotFound
 
 
 async def register_agent(
@@ -39,3 +39,24 @@ async def register_agent(
     await session.commit()
     await session.refresh(user)
     return user, api_key
+
+
+async def list_agents(session: AsyncSession) -> list[User]:
+    """All agent identities (auth_method='agent'), newest last."""
+    rows = await session.execute(
+        select(User).where(User.auth_method == "agent").order_by(User.id)
+    )
+    return list(rows.scalars().all())
+
+
+async def deactivate_user(session: AsyncSession, user_id: int) -> User:
+    """Soft-delete: mark a user inactive so it can no longer authenticate and
+    drops from active lists, while its recorded work stays attributable.
+    Idempotent (deactivating an already-inactive user is a no-op)."""
+    user = await session.get(User, user_id)
+    if user is None:
+        raise NotFound(f"user {user_id} not found")
+    user.active = False
+    await session.commit()
+    await session.refresh(user)
+    return user

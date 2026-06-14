@@ -146,3 +146,17 @@ def test_run_record_cascade_param(monkeypatch):
     )
     assert result.exit_code == 0
     assert calls[0][2]["params"] == {"cascade": True}
+
+
+def test_agent_list_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])
+    assert runner.invoke(cli.app, ["agent", "list"]).exit_code == 0
+    assert calls[0][:2] == ("GET", "/api/v1/users/agents")
+
+
+def test_agent_deactivate_invokes_delete(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    assert runner.invoke(cli.app, ["agent", "deactivate", "6"]).exit_code == 0
+    assert calls[0][:2] == ("DELETE", "/api/v1/users/6")

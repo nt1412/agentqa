@@ -46,3 +46,34 @@ async def test_register_agent_endpoint(client, auth_headers):
     assert data["auth_method"] == "agent"
     assert data["api_key"].startswith("aqa_")
     assert "RECOMMENDED WORKFLOW" in data["orientation"]
+
+
+@pytest.mark.asyncio
+async def test_list_agents_and_deactivate(session):
+    u, key = await users.register_agent(session, login="to-deactivate")
+    assert any(a.id == u.id for a in await users.list_agents(session))
+
+    d = await users.deactivate_user(session, u.id)
+    assert d.active is False
+
+    # a deactivated identity can no longer authenticate
+    from app.services import auth
+    from app.services.errors import Unauthorized
+
+    with pytest.raises(Unauthorized):
+        await auth.user_from_api_key(session, key)
+
+
+@pytest.mark.asyncio
+async def test_list_and_deactivate_agent_endpoints(client, auth_headers):
+    reg = await client.post(
+        "/api/v1/users/register-agent", json={"login": "rest-deact"}, headers=auth_headers
+    )
+    aid = reg.json()["id"]
+    lst = await client.get("/api/v1/users/agents", headers=auth_headers)
+    assert lst.status_code == 200
+    assert any(a["id"] == aid for a in lst.json())
+
+    d = await client.delete(f"/api/v1/users/{aid}", headers=auth_headers)
+    assert d.status_code == 200
+    assert d.json()["active"] is False

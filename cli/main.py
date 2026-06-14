@@ -313,5 +313,17 @@ def agent_register(
     _print(_request("POST", "/api/v1/users/register-agent", json_body=body))
 
 
+@agent_app.command("list")
+def agent_list():
+    """List agent identities (find probe/stale ones to clean up)."""
+    _print(_request("GET", "/api/v1/users/agents"))
+
+
+@agent_app.command("deactivate")
+def agent_deactivate(user_id: int):
+    """Soft-delete an agent identity (mark inactive); its recorded work stays."""
+    _print(_request("DELETE", f"/api/v1/users/{user_id}"))
+
+
 if __name__ == "__main__":
     app()

@@ -113,3 +113,11 @@ async def test_register_agent(session):
     )
     history = await mcp.get_agent_execution_history(agent_id=result["id"], project_id=p.id)
     assert len(history) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_and_deactivate_agent_mcp(session):
+    r = await mcp.register_agent(login="mcp-deact")
+    assert any(a["id"] == r["id"] for a in await mcp.list_agents())
+    d = await mcp.deactivate_agent(user_id=r["id"])
+    assert d["active"] is False
