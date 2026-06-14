@@ -1,5 +1,7 @@
 # AgentQA
 
+[![CI](https://github.com/nt1412/agentqa/actions/workflows/ci.yml/badge.svg)](https://github.com/nt1412/agentqa/actions/workflows/ci.yml)
+
 Test management for agentic coding — TestLink-equivalent, with a REST API, an MCP server, and a CLI over one shared service layer.
 
 ## Quick start
