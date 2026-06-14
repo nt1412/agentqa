@@ -168,6 +168,43 @@ async def test_latest_status_breaks_ties_by_id(session):
 
 
 @pytest.mark.asyncio
+async def test_run_manifest_per_build_gating(session):
+    _, _, cases, plan = await _project_with_cases(session, "MANB")
+    await plans.add_cases(session, plan.id, [cases[0].id, cases[1].id])
+    await testcases.add_dependency(session, cases[1].id, cases[0].id)
+
+    # prereq passed in build "old", then failed in build "new"
+    old = await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=cases[0].id, plan_id=plan.id, build_name="old", status="pass"),
+        tester_id=None,
+    )
+    new = await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=cases[0].id, plan_id=plan.id, build_name="new", status="fail"),
+        tester_id=None,
+    )
+
+    # global-latest: newest is the fail -> dependent blocked
+    g = {m["case_id"]: m for m in await plans.get_run_manifest(session, plan.id)}
+    assert g[cases[1].id]["runnable"] is False
+
+    # scoped to the build where the prereq passed -> runnable
+    in_old = {
+        m["case_id"]: m
+        for m in await plans.get_run_manifest(session, plan.id, build_id=old.build_id)
+    }
+    assert in_old[cases[1].id]["runnable"] is True
+
+    # scoped to the build where the prereq failed -> blocked
+    in_new = {
+        m["case_id"]: m
+        for m in await plans.get_run_manifest(session, plan.id, build_id=new.build_id)
+    }
+    assert in_new[cases[1].id]["runnable"] is False
+
+
+@pytest.mark.asyncio
 async def test_run_manifest_gating_stays_blocked_on_fail(session):
     _, _, cases, plan = await _project_with_cases(session, "MAN3")
     await plans.add_cases(session, plan.id, [cases[0].id, cases[1].id])
@@ -179,3 +216,59 @@ async def test_run_manifest_gating_stays_blocked_on_fail(session):
     )
     manifest = {m["case_id"]: m for m in await plans.get_run_manifest(session, plan.id)}
     assert manifest[cases[1].id]["runnable"] is False
+
+
+@pytest.mark.asyncio
+async def test_record_cascade_blocks_downstream(session):
+    _, _, cases, plan = await _project_with_cases(session, "CASC")
+    a, b, c = cases
+    await plans.add_cases(session, plan.id, [a.id, b.id, c.id])
+    await testcases.add_dependency(session, b.id, a.id)  # b needs a
+    await testcases.add_dependency(session, c.id, b.id)  # c needs b
+
+    await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=a.id, plan_id=plan.id, build_name="b1", status="fail"),
+        tester_id=None,
+        cascade=True,
+    )
+    # transitive downstream (b AND c) auto-blocked for this build
+    assert any(r.status == "blocked" for r in await executions.list_for_case(session, b.id))
+    assert any(r.status == "blocked" for r in await executions.list_for_case(session, c.id))
+
+
+@pytest.mark.asyncio
+async def test_cascade_off_by_default(session):
+    _, _, cases, plan = await _project_with_cases(session, "NOCASC")
+    a, b, _ = cases
+    await plans.add_cases(session, plan.id, [a.id, b.id])
+    await testcases.add_dependency(session, b.id, a.id)
+    await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=a.id, plan_id=plan.id, build_name="b1", status="fail"),
+        tester_id=None,  # cascade defaults False — service callers opt in
+    )
+    assert await executions.list_for_case(session, b.id) == []
+
+
+@pytest.mark.asyncio
+async def test_cascade_never_overrides_a_recorded_result(session):
+    _, _, cases, plan = await _project_with_cases(session, "CASCSKIP")
+    a, b, _ = cases
+    await plans.add_cases(session, plan.id, [a.id, b.id])
+    await testcases.add_dependency(session, b.id, a.id)
+    # b already ran (passed) in this build
+    await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=b.id, plan_id=plan.id, build_name="b1", status="pass"),
+        tester_id=None,
+    )
+    # a fails with cascade — b must keep its real result, not be auto-blocked
+    await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=a.id, plan_id=plan.id, build_name="b1", status="fail"),
+        tester_id=None,
+        cascade=True,
+    )
+    statuses = [r.status for r in await executions.list_for_case(session, b.id)]
+    assert statuses == ["pass"]

@@ -170,6 +170,7 @@ async def record_test_run(
     reasoning: dict | None = None,
     agent_id: int | None = None,
     agent_model: str | None = None,
+    cascade_blocked: bool = True,
 ) -> dict:
     """Record an execution result. Build is upserted by (plan, build_name).
 
@@ -177,6 +178,11 @@ async def record_test_run(
     blob (its chain-of-thought), persisted as evidence for later verification.
     Pass agent_id (the recording agent's user id) so the run shows up in
     get_agent_execution_history, and agent_model to capture provenance.
+
+    When status is fail/blocked and cascade_blocked is true (default), cases
+    downstream of this one (via add_test_dependency) that are in the same plan
+    are auto-recorded 'blocked' for this build — so the run reflects what can't
+    be trusted. Cases already recorded for the build are left untouched.
     """
     async with _session() as s:
         ex = await executions.record_execution(
@@ -195,6 +201,7 @@ async def record_test_run(
                 agent_model=agent_model,
             ),
             tester_id=agent_id,  # the recording agent's user id (None if anonymous)
+            cascade=cascade_blocked,
         )
         return {
             "id": ex.id,
@@ -526,16 +533,19 @@ async def add_test_dependency(case_id: int, depends_on_case_id: int) -> dict:
 
 
 @mcp.tool()
-async def get_run_manifest(plan_id: int) -> list[dict]:
+async def get_run_manifest(plan_id: int, build_id: int | None = None) -> list[dict]:
     """The ordered, priority- and dependency-aware run list for a plan.
 
     This is what a QA agent fetches to know WHAT to run and IN WHAT ORDER.
     Each entry: order, urgency, case_id, external_id, name, importance,
     latest_status, depends_on, blocked_by, runnable. Run entries top-down;
     skip any with runnable=false (record them blocked, citing blocked_by).
+
+    Pass build_id to gate against that build only (regression: a prerequisite
+    that passed in an older build does not count). Default is global-latest.
     """
     async with _session() as s:
-        return await plans.get_run_manifest(s, plan_id)
+        return await plans.get_run_manifest(s, plan_id, build_id)
 
 
 # ---------- Deferred tools (registered, bodies land in later phases) ----------

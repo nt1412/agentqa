@@ -168,6 +168,17 @@ async def get_dependencies(session: AsyncSession, case_id: int) -> list[int]:
     return list(rows.scalars().all())
 
 
+async def get_dependents(session: AsyncSession, case_id: int) -> list[int]:
+    """Case ids that depend on ``case_id`` (it is their prerequisite)."""
+    rows = await session.execute(
+        select(TestCaseRelation.source_id).where(
+            TestCaseRelation.dest_id == case_id,
+            TestCaseRelation.relation_type == DEPENDS_ON,
+        )
+    )
+    return list(rows.scalars().all())
+
+
 async def _creates_cycle(session: AsyncSession, case_id: int, prerequisite_id: int) -> bool:
     """True if making case_id depend on prerequisite_id would form a cycle.
 

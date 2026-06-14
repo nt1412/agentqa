@@ -3,11 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.execution import Execution, ExecutionStep
-from app.models.plan import Build, TestPlan
+from app.models.plan import Build, TestPlan, TestPlanCase
 from app.models.testcase import TestCase, TestCaseVersion, TestStep
 from app.schemas.execution import ExecutionCreate
 from app.services.errors import NotFound, ValidationFailed
 from app.services.evidence import record_claims_and_reasoning
+from app.services.testcases import get_dependents
 
 
 async def _resolve_case(session: AsyncSession, data: ExecutionCreate) -> TestCase:
@@ -59,10 +60,80 @@ async def _upsert_build(
     return build.id
 
 
+async def _transitive_dependents(session: AsyncSession, case_id: int) -> list[int]:
+    """All cases downstream of case_id via depends_on edges (BFS; graph is a DAG)."""
+    seen: set[int] = set()
+    order: list[int] = []
+    stack = [case_id]
+    while stack:
+        for dep in await get_dependents(session, stack.pop()):
+            if dep not in seen:
+                seen.add(dep)
+                order.append(dep)
+                stack.append(dep)
+    return order
+
+
+async def _cascade_block(
+    session: AsyncSession, trigger_case_id: int, trigger_external_id: str,
+    plan_id: int, build_id: int | None, tester_id: int | None,
+) -> list[int]:
+    """Record a blocked execution for each in-plan downstream case of a failed
+    prerequisite, so a regression run reflects what can't be trusted. Skips any
+    case already recorded for this build (never overrides a real result)."""
+    downstream = await _transitive_dependents(session, trigger_case_id)
+    if not downstream:
+        return []
+    members = set(
+        (
+            await session.execute(
+                select(TestCase.id)
+                .join(TestCaseVersion, TestCaseVersion.case_id == TestCase.id)
+                .join(TestPlanCase, TestPlanCase.version_id == TestCaseVersion.id)
+                .where(TestPlanCase.plan_id == plan_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    blocked: list[int] = []
+    for cid in downstream:
+        if cid not in members:
+            continue
+        already = (
+            await session.execute(
+                select(Execution.id)
+                .join(TestCaseVersion, TestCaseVersion.id == Execution.version_id)
+                .where(TestCaseVersion.case_id == cid, Execution.build_id == build_id)
+            )
+        ).first()
+        if already is not None:
+            continue
+        session.add(
+            Execution(
+                plan_id=plan_id,
+                version_id=await _current_version_id(session, cid),
+                build_id=build_id,
+                tester_id=tester_id,
+                execution_type="automated",
+                status="blocked",
+                notes=f"auto-blocked: prerequisite {trigger_external_id} did not pass",
+            )
+        )
+        blocked.append(cid)
+    if blocked:
+        await session.commit()
+    return blocked
+
+
 async def record_execution(
-    session: AsyncSession, data: ExecutionCreate, tester_id: int | None
+    session: AsyncSession,
+    data: ExecutionCreate,
+    tester_id: int | None,
+    cascade: bool = False,
 ) -> Execution:
     case = await _resolve_case(session, data)
+    case_id, case_external_id = case.id, case.external_id  # capture before commit expires them
     version_id = await _current_version_id(session, case.id)
     build_id = await _upsert_build(session, data.plan_id, data.build_name, data.commit_id)
 
@@ -109,8 +180,13 @@ async def record_execution(
         data.session_id,
         notes=data.notes,
     )
+    execution_id = execution.id
     await session.commit()
-    return await _load(session, execution.id)
+    if cascade and data.status in ("fail", "blocked") and data.plan_id is not None:
+        await _cascade_block(
+            session, case_id, case_external_id, data.plan_id, build_id, tester_id
+        )
+    return await _load(session, execution_id)
 
 
 async def _attach_case_ids(session: AsyncSession, executions: list[Execution]) -> None:

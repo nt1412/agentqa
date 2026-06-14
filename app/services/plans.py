@@ -128,22 +128,28 @@ async def remove_case(session: AsyncSession, plan_id: int, case_id: int) -> None
 
 
 async def _latest_status_by_case(
-    session: AsyncSession, case_ids: list[int]
+    session: AsyncSession, case_ids: list[int], build_id: int | None = None
 ) -> dict[int, str]:
-    """Most recent execution status for each case (across all its versions)."""
+    """Most recent execution status for each case (across all its versions).
+
+    When build_id is given, only executions for that build count — so gating
+    asks "did this prerequisite pass *in this build*?" (regression semantics)
+    rather than "did it ever pass anywhere".
+    """
     if not case_ids:
         return {}
-    rows = (
-        await session.execute(
-            select(TestCase.id, Execution.status, Execution.created_at)
-            .join(TestCaseVersion, TestCaseVersion.case_id == TestCase.id)
-            .join(Execution, Execution.version_id == TestCaseVersion.id)
-            .where(TestCase.id.in_(case_ids))
-            # id breaks ties when executions share a created_at (bulk-recorded
-            # in the same second) — otherwise "latest" is nondeterministic.
-            .order_by(Execution.created_at.desc(), Execution.id.desc())
-        )
-    ).all()
+    stmt = (
+        select(TestCase.id, Execution.status, Execution.created_at)
+        .join(TestCaseVersion, TestCaseVersion.case_id == TestCase.id)
+        .join(Execution, Execution.version_id == TestCaseVersion.id)
+        .where(TestCase.id.in_(case_ids))
+        # id breaks ties when executions share a created_at (bulk-recorded
+        # in the same second) — otherwise "latest" is nondeterministic.
+        .order_by(Execution.created_at.desc(), Execution.id.desc())
+    )
+    if build_id is not None:
+        stmt = stmt.where(Execution.build_id == build_id)
+    rows = (await session.execute(stmt)).all()
     latest: dict[int, str] = {}
     for cid, status, _created in rows:
         if cid not in latest:  # rows are newest-first, so first seen wins
@@ -151,7 +157,9 @@ async def _latest_status_by_case(
     return latest
 
 
-async def get_run_manifest(session: AsyncSession, plan_id: int) -> list[dict]:
+async def get_run_manifest(
+    session: AsyncSession, plan_id: int, build_id: int | None = None
+) -> list[dict]:
     """The ordered, priority- and dependency-aware run list for a plan.
 
     Each entry tells an agent what to run, in what order, at what priority, and
@@ -159,6 +167,9 @@ async def get_run_manifest(session: AsyncSession, plan_id: int) -> list[dict]:
       order, urgency, case_id, external_id, name, importance, latest_status,
       depends_on (prerequisite case ids), blocked_by (prereqs not yet passing),
       runnable (bool — true iff blocked_by is empty).
+
+    Pass build_id to gate against that build only (regression: a prerequisite
+    that passed in an older build does not count). Default is global-latest.
     """
     await get_plan(session, plan_id)
     links = (
@@ -194,7 +205,13 @@ async def get_run_manifest(session: AsyncSession, plan_id: int) -> list[dict]:
         )
     ).all()
     cmeta = {cid: (ext, name) for cid, ext, name in crows}
-    latest = await _latest_status_by_case(session, case_ids)
+
+    # resolve dependencies up front; include prerequisites that aren't in the
+    # plan so their status is still evaluated (otherwise an out-of-plan prereq
+    # would always read as "not passing").
+    deps_by_case = {cid: await get_dependencies(session, cid) for cid in set(case_ids)}
+    status_ids = set(case_ids) | {d for deps in deps_by_case.values() for d in deps}
+    latest = await _latest_status_by_case(session, list(status_ids), build_id)
 
     manifest: list[dict] = []
     for link in links:
@@ -202,7 +219,7 @@ async def get_run_manifest(session: AsyncSession, plan_id: int) -> list[dict]:
         if cid is None:
             continue
         ext, name = cmeta.get(cid, (None, None))
-        deps = await get_dependencies(session, cid)
+        deps = deps_by_case.get(cid, [])
         blocked_by = [d for d in deps if latest.get(d) != "pass"]
         manifest.append(
             {

@@ -55,9 +55,14 @@ async def list_cases(plan_id: int, session: SessionDep, user: CurrentUser):
 
 
 @router.get("/plans/{plan_id}/manifest", response_model=list[RunManifestEntry])
-async def run_manifest(plan_id: int, session: SessionDep, user: CurrentUser):
-    """Ordered, priority- and dependency-aware run list (same as the MCP tool)."""
-    return await plans.get_run_manifest(session, plan_id)
+async def run_manifest(
+    plan_id: int, session: SessionDep, user: CurrentUser, build_id: int | None = None
+):
+    """Ordered, priority- and dependency-aware run list (same as the MCP tool).
+
+    Pass build_id to gate against that build only (regression semantics).
+    """
+    return await plans.get_run_manifest(session, plan_id, build_id)
 
 
 @router.post(
