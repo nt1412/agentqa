@@ -139,7 +139,9 @@ async def _latest_status_by_case(
             .join(TestCaseVersion, TestCaseVersion.case_id == TestCase.id)
             .join(Execution, Execution.version_id == TestCaseVersion.id)
             .where(TestCase.id.in_(case_ids))
-            .order_by(Execution.created_at.desc())
+            # id breaks ties when executions share a created_at (bulk-recorded
+            # in the same second) — otherwise "latest" is nondeterministic.
+            .order_by(Execution.created_at.desc(), Execution.id.desc())
         )
     ).all()
     latest: dict[int, str] = {}

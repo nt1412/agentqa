@@ -135,6 +135,39 @@ async def test_run_manifest_gating(session):
 
 
 @pytest.mark.asyncio
+async def test_latest_status_breaks_ties_by_id(session):
+    from sqlalchemy import update
+
+    from app.models.execution import Execution
+
+    _, _, cases, plan = await _project_with_cases(session, "MAN4")
+    await plans.add_cases(session, plan.id, [cases[0].id, cases[1].id])
+    await testcases.add_dependency(session, cases[1].id, cases[0].id)
+
+    e1 = await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=cases[0].id, plan_id=plan.id, build_name="b1", status="pass"),
+        tester_id=None,
+    )
+    e2 = await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=cases[0].id, plan_id=plan.id, build_name="b1", status="fail"),
+        tester_id=None,
+    )
+    # force identical created_at so only the id tiebreak can decide "latest"
+    same = (await session.get(Execution, e1.id)).created_at
+    await session.execute(
+        update(Execution).where(Execution.id.in_([e1.id, e2.id])).values(created_at=same)
+    )
+    await session.commit()
+
+    manifest = {m["case_id"]: m for m in await plans.get_run_manifest(session, plan.id)}
+    # higher-id execution (fail) wins the tie → prereq not passing → dependent blocked
+    assert manifest[cases[0].id]["latest_status"] == "fail"
+    assert manifest[cases[1].id]["runnable"] is False
+
+
+@pytest.mark.asyncio
 async def test_run_manifest_gating_stays_blocked_on_fail(session):
     _, _, cases, plan = await _project_with_cases(session, "MAN3")
     await plans.add_cases(session, plan.id, [cases[0].id, cases[1].id])
