@@ -121,3 +121,13 @@ async def test_list_and_deactivate_agent_mcp(session):
     assert any(a["id"] == r["id"] for a in await mcp.list_agents())
     d = await mcp.deactivate_agent(user_id=r["id"])
     assert d["active"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_project_mcp(session):
+    p = await mcp.create_project(name="MCP Onboard", prefix="MCPONB")
+    assert p["id"] is not None
+    assert p["prefix"] == "MCPONB"
+    # the returned id is usable by the rest of the workflow
+    suite = await mcp.create_test_suite(project_id=p["id"], path="Root")
+    assert suite["id"] is not None

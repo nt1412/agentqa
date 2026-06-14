@@ -18,6 +18,7 @@ from app.services import (
     evidence,
     executions,
     plans,
+    projects,
     requirements,
     suites,
     testcases,
@@ -67,6 +68,20 @@ def _case_dump(out) -> dict:
 
 
 # ---------- Phase 1: entity-backed tools ----------
+
+
+@mcp.tool()
+async def create_project(name: str, prefix: str) -> dict:
+    """Onboard a new project — the top-level container for suites/cases/plans.
+
+    The prefix is permanent, unique, and drives external IDs (e.g. 'MSVC-1').
+    Returns the project id to use with the other tools.
+    """
+    from app.schemas.project import ProjectCreate
+
+    async with _session() as s:
+        p = await projects.create_project(s, ProjectCreate(name=name, prefix=prefix))
+        return {"id": p.id, "name": p.name, "prefix": p.prefix}
 
 
 @mcp.tool()
