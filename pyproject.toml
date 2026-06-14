@@ -35,6 +35,9 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+# domain models are named Test* (TestCase, TestPlan, ...); restrict pytest class
+# collection to a pattern that won't match them (all our tests are functions)
+python_classes = ["Check"]
 
 [tool.ruff]
 line-length = 100
@@ -44,7 +47,7 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.setuptools]
-packages = ["app", "cli"]
+packages = ["app", "cli", "scripts"]
 
 [build-system]
 requires = ["setuptools>=68"]
