@@ -26,3 +26,47 @@ def test_generate_api_key_is_unique_and_prefixed():
     k2 = auth.generate_api_key()
     assert k1.startswith("aqa_")
     assert k1 != k2
+
+
+@pytest.mark.asyncio
+async def test_health(client):
+    resp = await client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_login_success(client, user):
+    resp = await client.post("/api/v1/auth/login", json={"login": "alice", "password": "pw"})
+    assert resp.status_code == 200
+    assert "access_token" in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_login_bad_password(client, user):
+    resp = await client.post("/api/v1/auth/login", json={"login": "alice", "password": "nope"})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_me_requires_auth(client):
+    resp = await client.get("/api/v1/auth/me")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_me_with_token(client, auth_headers):
+    resp = await client.get("/api/v1/auth/me", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["login"] == "alice"
+
+
+@pytest.mark.asyncio
+async def test_api_key_issue_and_use(client, auth_headers):
+    issued = await client.post("/api/v1/auth/token", headers=auth_headers)
+    assert issued.status_code == 200
+    key = issued.json()["api_key"]
+    assert key.startswith("aqa_")
+    resp = await client.get("/api/v1/auth/me", headers={"X-API-Key": key})
+    assert resp.status_code == 200
+    assert resp.json()["login"] == "alice"
