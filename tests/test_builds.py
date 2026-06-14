@@ -60,3 +60,26 @@ async def test_build_endpoints(client, auth_headers):
     assert create.status_code == 201
     listed = await client.get(f"/api/v1/plans/{plan_id}/builds", headers=auth_headers)
     assert any(b["name"] == "v1" for b in listed.json())
+
+
+@pytest.mark.asyncio
+async def test_build_api_and_execution_upsert_agree(session):
+    # The spec invariant: builds.create_build and executions._upsert_build must
+    # resolve to the SAME build row for a given (plan, name).
+    from app.schemas.execution import ExecutionCreate
+    from app.schemas.suite import SuiteCreate
+    from app.schemas.testcase import TestCaseCreate
+    from app.services import executions, suites, testcases
+
+    p = await projects.create_project(session, ProjectCreate(name="P", prefix="B4"))
+    plan = await plans.create_plan(session, p.id, PlanCreate(name="Plan"))
+    s = await suites.create_suite(session, p.id, SuiteCreate(name="S"))
+    tc = await testcases.create_test_case(session, s.id, TestCaseCreate(name="c"))
+
+    created = await builds.create_build(session, plan.id, BuildCreate(name="v9"))
+    ex = await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=tc.id, plan_id=plan.id, build_name="v9", status="pass"),
+        tester_id=None,
+    )
+    assert ex.build_id == created.id  # same (plan, name) -> same build row

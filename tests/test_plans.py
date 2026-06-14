@@ -129,3 +129,21 @@ async def test_add_cases_endpoint(client, auth_headers, session):
     assert add.status_code == 201
     listed = await client.get(f"/api/v1/plans/{plan_id}/cases", headers=auth_headers)
     assert len(listed.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_remove_case_is_version_agnostic(session):
+    # A case linked under v1, then bumped to v2, must still be fully removable.
+    from app.schemas.suite import SuiteCreate
+    from app.schemas.testcase import TestCaseCreate, VersionCreate
+    from app.services import suites, testcases
+
+    p = await projects.create_project(session, ProjectCreate(name="P", prefix="PC4"))
+    s = await suites.create_suite(session, p.id, SuiteCreate(name="S"))
+    tc = await testcases.create_test_case(session, s.id, TestCaseCreate(name="c"))
+    plan = await plans.create_plan(session, p.id, PlanCreate(name="Plan"))
+
+    await plans.add_cases(session, plan.id, [tc.id])  # links v1
+    await testcases.create_version(session, tc.id, VersionCreate(summary="v2"))  # v2 now active
+    await plans.remove_case(session, plan.id, tc.id)  # must drop the orphaned v1 link
+    assert await plans.list_plan_cases(session, plan.id) == []

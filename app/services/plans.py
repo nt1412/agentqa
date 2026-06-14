@@ -91,9 +91,22 @@ async def list_plan_cases(session: AsyncSession, plan_id: int) -> list[TestPlanC
 
 
 async def remove_case(session: AsyncSession, plan_id: int, case_id: int) -> None:
-    version_id = await _current_version_id(session, case_id)
+    # Version-agnostic: "remove this case from the plan" must drop links to ANY of
+    # the case's versions, not just the current active one — otherwise a case linked
+    # under v1 and later bumped to v2 leaves an orphaned v1 link (skews coverage).
+    version_ids = (
+        (
+            await session.execute(
+                select(TestCaseVersion.id).where(TestCaseVersion.case_id == case_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not version_ids:
+        return
     stmt = select(TestPlanCase).where(
-        TestPlanCase.plan_id == plan_id, TestPlanCase.version_id == version_id
+        TestPlanCase.plan_id == plan_id, TestPlanCase.version_id.in_(version_ids)
     )
     for link in (await session.execute(stmt)).scalars().all():
         await session.delete(link)
