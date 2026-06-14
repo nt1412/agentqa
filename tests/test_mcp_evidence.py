@@ -18,7 +18,7 @@ def _use_test_session(session, monkeypatch):
         async def __aexit__(self, *args):
             return False
 
-    monkeypatch.setattr(mcp, "_session", lambda: _Ctx())
+    monkeypatch.setattr(mcp, "_session", lambda *a, **k: _Ctx())
     monkeypatch.setattr(storage, "put_object", lambda key, data, ct: key)
 
 

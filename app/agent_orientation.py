@@ -36,6 +36,10 @@ KEY BEHAVIORS
   only if it passed in that build.
 - Idempotent: create_test_suite (by path), add_cases_to_plan,
   add_test_dependency, and coverage links are safe to re-run.
+- Auth: if this server has per-agent auth enabled, send your api_key (above) as
+  an X-API-Key header on every MCP call. register_agent stays open so you can
+  always bootstrap. When auth is on, your authenticated identity is used for
+  attribution automatically (a passed agent_id can't override it).
 
 Full reference: docs/agent-guide.md
 """

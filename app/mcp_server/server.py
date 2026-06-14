@@ -6,9 +6,12 @@ explicit stubs raising NotImplementedError until their phase lands.
 """
 
 import base64
+import os
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.lowlevel.server import request_ctx
 
 from app.db import SessionLocal
 from app.schemas.execution import ExecutionCreate, StepResultIn
@@ -24,14 +27,89 @@ from app.services import (
     testcases,
     users,
 )
+from app.services import (
+    auth as auth_service,
+)
+from app.services.errors import Unauthorized
 
 mcp = FastMCP("agentqa")
 
+# ---------- lightweight per-agent auth (opt-in via AGENTQA_MCP_REQUIRE_AUTH) ----------
+# When enabled, every tool except register_agent requires a valid X-API-Key header
+# (an agent's own key, from register_agent). The authenticated identity also
+# overrides any caller-supplied agent_id/auditor_id, so attribution can't be spoofed.
+
+# the authenticated agent for the current request (set by _session)
+_auth_agent: ContextVar = ContextVar("agentqa_mcp_agent", default=None)
+
+
+class AuthRequired(Exception):
+    """MCP auth is enabled but the request carried no valid API key."""
+
+
+def _auth_enabled() -> bool:
+    return os.environ.get("AGENTQA_MCP_REQUIRE_AUTH", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _request_api_key() -> str | None:
+    """The X-API-Key (or Bearer token) on the current MCP request, if any."""
+    try:
+        req = request_ctx.get().request
+    except LookupError:
+        return None
+    headers = getattr(req, "headers", None)
+    if headers is None:
+        return None
+    key = headers.get("x-api-key")
+    if not key:
+        authz = headers.get("authorization") or ""
+        if authz.lower().startswith("bearer "):
+            key = authz.split(" ", 1)[1].strip()
+    return key or None
+
+
+async def _current_agent(session):
+    key = _request_api_key()
+    if not key:
+        return None
+    try:
+        return await auth_service.user_from_api_key(session, key)
+    except Unauthorized:
+        return None
+
+
+async def _require_agent(session):
+    """Enforce auth when enabled. Returns the authenticated user, or None when
+    auth is disabled. Raises AuthRequired when enabled and no valid key."""
+    if not _auth_enabled():
+        return None
+    agent = await _current_agent(session)
+    if agent is None:
+        raise AuthRequired(
+            "MCP auth is enabled — pass a valid X-API-Key header "
+            "(an agent key from register_agent / `agentqa agent register`)."
+        )
+    return agent
+
+
+def _provenance_id(passed_id):
+    """The authenticated agent's id overrides a caller-supplied id so attribution
+    can't be spoofed; falls back to the passed id when auth is disabled."""
+    agent = _auth_agent.get()
+    return agent.id if agent is not None else passed_id
+
 
 @asynccontextmanager
-async def _session():
+async def _session(require_auth: bool = True):
     async with SessionLocal() as s:
-        yield s
+        agent = await _require_agent(s) if require_auth else None
+        token = _auth_agent.set(agent)
+        try:
+            yield s
+        finally:
+            _auth_agent.reset(token)
 
 
 def _version_dump(out) -> dict | None:
@@ -215,7 +293,9 @@ async def record_test_run(
                 reasoning=reasoning,
                 agent_model=agent_model,
             ),
-            tester_id=agent_id,  # the recording agent's user id (None if anonymous)
+            # authenticated identity overrides a passed agent_id (anti-spoof);
+            # falls back to agent_id when MCP auth is disabled
+            tester_id=_provenance_id(agent_id),
             cascade=cascade_blocked,
         )
         return {
@@ -325,7 +405,7 @@ async def verify_claim(
             s,
             claim_id,
             VerificationCreate(verdict=verdict, reasoning=reasoning),
-            auditor_id=auditor_id,
+            auditor_id=_provenance_id(auditor_id),  # authenticated identity wins
         )
         return {"id": v.id, "claim_id": v.claim_id, "verdict": v.verdict}
 
@@ -350,7 +430,7 @@ async def create_audit_report(
                 findings=findings,
                 quality_score=quality_score,
             ),
-            auditor_id=auditor_id,
+            auditor_id=_provenance_id(auditor_id),  # authenticated identity wins
         )
         return {"id": r.id, "entity_type": r.entity_type, "quality_score": r.quality_score}
 
@@ -460,7 +540,8 @@ async def register_agent(
     """
     from app.agent_orientation import AGENT_ORIENTATION
 
-    async with _session() as s:
+    # open even when auth is enabled — this is how an agent gets its key (bootstrap)
+    async with _session(require_auth=False) as s:
         user, api_key = await users.register_agent(
             s,
             login=login,

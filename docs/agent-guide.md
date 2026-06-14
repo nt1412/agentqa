@@ -35,9 +35,16 @@ MCP surface grew to **25 tools**. The CLI now mirrors all of this.
 ## Connect (MCP)
 
 ```
-streamable-http: http://localhost:8001/mcp     (no auth at the MCP layer)
+streamable-http: http://localhost:8001/mcp
 ```
 Tools are self-describing — list them on connect. The DB (Postgres) must be up.
+
+**Auth (opt-in).** By default the MCP layer is open. If the operator sets
+`AGENTQA_MCP_REQUIRE_AUTH=true`, every tool except `register_agent` requires a
+valid **`X-API-Key`** header (your own key from `register_agent`); send it on
+every call. With auth on, your authenticated identity is used for attribution —
+a passed `agent_id`/`auditor_id` can't override it (anti-spoof). Deactivated
+identities can no longer authenticate.
 
 ## Connect (REST/CLI)
 

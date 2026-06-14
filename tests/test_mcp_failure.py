@@ -19,7 +19,7 @@ def _setup(session, monkeypatch):
         async def __aexit__(self, *args):
             return False
 
-    monkeypatch.setattr(mcp, "_session", lambda: _Ctx())
+    monkeypatch.setattr(mcp, "_session", lambda *a, **k: _Ctx())
     monkeypatch.setattr(emb_mod, "is_available", lambda: True)
     monkeypatch.setattr(emb_mod, "embed", fake_embed)
 

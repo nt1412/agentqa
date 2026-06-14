@@ -45,7 +45,13 @@ python -m app.mcp_server.server   # stdio transport
 
 **Building tests with an agent?** See [docs/agent-guide.md](docs/agent-guide.md) —
 the recommended workflow (register → discover → plan → run → self-correct →
-audit) across the 25 MCP tools and the matching CLI.
+audit) across the 28 MCP tools and the matching CLI.
+
+**Per-agent MCP auth (opt-in).** The MCP layer is open by default. Set
+`AGENTQA_MCP_REQUIRE_AUTH=true` to require a valid `X-API-Key` (an agent key from
+`register_agent`) on every tool except `register_agent`. The authenticated
+identity then drives attribution (a passed `agent_id` can't override it), and
+deactivating an identity revokes its access.
 
 ## Tests
 
