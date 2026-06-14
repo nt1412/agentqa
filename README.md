@@ -43,6 +43,10 @@ agentqa run record 1 --plan 1 --build b1 --status pass
 python -m app.mcp_server.server   # stdio transport
 ```
 
+**Building tests with an agent?** See [docs/agent-guide.md](docs/agent-guide.md) —
+the recommended workflow (register → discover → plan → run → self-correct →
+audit) across the 25 MCP tools and the matching CLI.
+
 ## Tests
 
 ```bash

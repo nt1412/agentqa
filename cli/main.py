@@ -18,6 +18,7 @@ evidence_app = typer.Typer(help="Evidence & artifacts")
 claim_app = typer.Typer(help="Claims & verification")
 context_app = typer.Typer(help="Self-correction context")
 req_app = typer.Typer(help="Requirements & coverage")
+agent_app = typer.Typer(help="Agent identities")
 app.add_typer(project_app, name="project")
 app.add_typer(suite_app, name="suite")
 app.add_typer(case_app, name="case")
@@ -30,6 +31,7 @@ app.add_typer(evidence_app, name="evidence")
 app.add_typer(claim_app, name="claim")
 app.add_typer(context_app, name="context")
 app.add_typer(req_app, name="req")
+app.add_typer(agent_app, name="agent")
 
 
 def _request(method: str, path: str, *, json_body=None, params=None) -> dict:
@@ -102,6 +104,18 @@ def case_get(case_id: int):
     _print(_request("GET", f"/api/v1/cases/{case_id}"))
 
 
+@case_app.command("depends")
+def case_depends(case_id: int, on: int = typer.Option(..., "--on")):
+    """Record that this case depends on another (a prerequisite, for run gating)."""
+    _print(
+        _request(
+            "POST",
+            f"/api/v1/cases/{case_id}/dependencies",
+            json_body={"depends_on_case_id": on},
+        )
+    )
+
+
 @run_app.command("record")
 def run_record(
     case_id: int,
@@ -110,13 +124,17 @@ def run_record(
     status: str = typer.Option(..., "--status"),
     from_file: Path = typer.Option(None, "--steps-file"),  # noqa: B008
     notes: str = typer.Option(None, "--notes"),
+    commit: str = typer.Option(None, "--commit"),
+    cascade: bool = typer.Option(False, "--cascade/--no-cascade"),
 ):
     body = {"case_id": case_id, "plan_id": plan, "build_name": build, "status": status}
     if from_file:
         body["step_results"] = json.loads(from_file.read_text())
     if notes:
         body["notes"] = notes
-    _print(_request("POST", "/api/v1/executions", json_body=body))
+    if commit:
+        body["commit_id"] = commit
+    _print(_request("POST", "/api/v1/executions", json_body=body, params={"cascade": cascade}))
 
 
 @run_app.command("list")
@@ -135,8 +153,25 @@ def plan_list(project_id: int):
 
 
 @plan_app.command("add-case")
-def plan_add_case(plan_id: int, case: int = typer.Option(..., "--case")):
-    _print(_request("POST", f"/api/v1/plans/{plan_id}/cases", json_body={"case_ids": [case]}))
+def plan_add_case(
+    plan_id: int,
+    case: int = typer.Option(..., "--case"),
+    urgency: int = typer.Option(2, "--urgency"),
+):
+    _print(
+        _request(
+            "POST",
+            f"/api/v1/plans/{plan_id}/cases",
+            json_body={"case_ids": [case], "urgency": urgency},
+        )
+    )
+
+
+@plan_app.command("manifest")
+def plan_manifest(plan_id: int, build: int = typer.Option(None, "--build")):
+    """Ordered, dependency-gated run list. --build scopes gating to one build."""
+    params = {"build_id": build} if build else None
+    _print(_request("GET", f"/api/v1/plans/{plan_id}/manifest", params=params))
 
 
 @build_app.command("create")
@@ -263,6 +298,19 @@ def req_gaps(project_id: int):
 @req_app.command("traceability")
 def req_traceability(project_id: int):
     _print(_request("GET", f"/api/v1/projects/{project_id}/traceability"))
+
+
+@agent_app.command("register")
+def agent_register(
+    login: str = typer.Option(..., "--login"),
+    model: str = typer.Option(None, "--model"),
+    email: str = typer.Option(None, "--email"),
+    name: str = typer.Option(None, "--name"),
+):
+    """Create an agent identity; prints a one-time API key. Pass the returned
+    id as the tester for attributable runs."""
+    body = {"login": login, "agent_model": model, "email": email, "display_name": name}
+    _print(_request("POST", "/api/v1/users/register-agent", json_body=body))
 
 
 if __name__ == "__main__":

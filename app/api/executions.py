@@ -8,9 +8,13 @@ router = APIRouter(prefix="/api/v1", tags=["executions"])
 
 
 @router.post("/executions", response_model=ExecutionOut, status_code=status.HTTP_201_CREATED)
-async def record(body: ExecutionCreate, session: SessionDep, user: CurrentUser):
+async def record(
+    body: ExecutionCreate, session: SessionDep, user: CurrentUser, cascade: bool = False
+):
+    """Record an execution. Pass ?cascade=true to auto-block downstream cases
+    (dependents in the same plan) when this run fails/blocks."""
     tester_id = None if user.auth_method == "agent" else user.id
-    return await executions.record_execution(session, body, tester_id=tester_id)
+    return await executions.record_execution(session, body, tester_id=tester_id, cascade=cascade)
 
 
 @router.get("/executions/{execution_id}", response_model=ExecutionOut)

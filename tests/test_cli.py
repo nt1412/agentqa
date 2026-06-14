@@ -105,3 +105,44 @@ def test_req_gaps_invokes_get(monkeypatch):
     result = runner.invoke(cli.app, ["req", "gaps", "3"])
     assert result.exit_code == 0
     assert calls[0][1] == "/api/v1/projects/3/coverage-gaps"
+
+
+def test_agent_register_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 4, "api_key": "x"}
+    )
+    result = runner.invoke(cli.app, ["agent", "register", "--login", "bot", "--model", "claude"])
+    assert result.exit_code == 0
+    assert calls[0][0] == "POST"
+    assert calls[0][1] == "/api/v1/users/register-agent"
+    assert calls[0][2]["json_body"]["login"] == "bot"
+
+
+def test_plan_manifest_invokes_get_with_build(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])
+    result = runner.invoke(cli.app, ["plan", "manifest", "1", "--build", "2"])
+    assert result.exit_code == 0
+    assert calls[0][:2] == ("GET", "/api/v1/plans/1/manifest")
+    assert calls[0][2]["params"] == {"build_id": 2}
+
+
+def test_case_depends_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["case", "depends", "5", "--on", "3"])
+    assert result.exit_code == 0
+    assert calls[0][:2] == ("POST", "/api/v1/cases/5/dependencies")
+    assert calls[0][2]["json_body"] == {"depends_on_case_id": 3}
+
+
+def test_run_record_cascade_param(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(
+        cli.app,
+        ["run", "record", "5", "--plan", "1", "--build", "b1", "--status", "fail", "--cascade"],
+    )
+    assert result.exit_code == 0
+    assert calls[0][2]["params"] == {"cascade": True}

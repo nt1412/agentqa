@@ -31,3 +31,17 @@ async def test_register_agent_duplicate_login_conflicts(session):
     await users.register_agent(session, login="dupe")
     with pytest.raises(Conflict):
         await users.register_agent(session, login="dupe")
+
+
+@pytest.mark.asyncio
+async def test_register_agent_endpoint(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/users/register-agent",
+        json={"login": "rest-bot", "agent_model": "claude-opus-4-8"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["id"] is not None
+    assert data["auth_method"] == "agent"
+    assert data["api_key"].startswith("aqa_")
