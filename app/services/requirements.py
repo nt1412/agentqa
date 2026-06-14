@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.requirement import ReqCoverage, ReqSpec, Requirement, ReqVersion
-from app.models.testcase import TestCaseVersion
+from app.models.testcase import TestCase, TestCaseVersion
 from app.schemas.requirement import (
     CoverageGap,
     ReqSpecCreate,
@@ -11,7 +11,7 @@ from app.schemas.requirement import (
     ReqVersionOut,
     TraceabilityRow,
 )
-from app.services.errors import NotFound
+from app.services.errors import NotFound, ValidationFailed
 from app.services.plans import _current_version_id
 from app.services.projects import get_project
 
@@ -72,8 +72,27 @@ async def list_requirements(session: AsyncSession, spec_id: int) -> list[Require
 async def link_coverage(
     session: AsyncSession, req_version_id: int, case_ids: list[int]
 ) -> list[ReqCoverage]:
+    # Resolve the requirement's project so we can reject cross-project coverage links
+    # (an agent passing a stray/hallucinated case id would otherwise skew traceability).
+    req_project_id = (
+        await session.execute(
+            select(ReqSpec.project_id)
+            .select_from(ReqVersion)
+            .join(Requirement, Requirement.id == ReqVersion.req_id)
+            .join(ReqSpec, ReqSpec.id == Requirement.spec_id)
+            .where(ReqVersion.id == req_version_id)
+        )
+    ).scalar_one_or_none()
+
     created: list[ReqCoverage] = []
     for case_id in case_ids:
+        case = await session.get(TestCase, case_id)
+        if case is None:
+            raise NotFound(f"test case {case_id} not found")
+        if req_project_id is not None and case.project_id != req_project_id:
+            raise ValidationFailed(
+                f"test case {case_id} belongs to a different project than the requirement"
+            )
         case_version_id = await _current_version_id(session, case_id)
         existing = (
             await session.execute(
@@ -112,6 +131,10 @@ async def link_requirement_coverage(
 async def get_coverage_gaps(
     session: AsyncSession, project_id: int, spec_id: int | None = None
 ) -> list[CoverageGap]:
+    # INVARIANT: test-case versions are never deactivated (create_version keeps prior
+    # versions active), so coverage that points at an older case version still counts.
+    # If version retirement is ever introduced, this query and get_traceability must add
+    # a TestCaseVersion.active filter and re-point/deactivate stale ReqCoverage rows.
     # current req version per requirement in the project, with no active coverage
     spec_stmt = select(ReqSpec.id).where(ReqSpec.project_id == project_id)
     if spec_id is not None:
