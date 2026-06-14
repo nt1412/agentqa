@@ -107,6 +107,7 @@ async def record_execution(
         data.reasoning,
         data.agent_model,
         data.session_id,
+        notes=data.notes,
     )
     await session.commit()
     return await _load(session, execution.id)

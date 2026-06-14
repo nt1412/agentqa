@@ -1,7 +1,9 @@
+import json
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import storage
+from app import embeddings, storage
 from app.models.evidence import (
     AuditReport,
     ClaimVerification,
@@ -27,19 +29,35 @@ async def record_claims_and_reasoning(
     reasoning: dict | None,
     agent_model: str | None,
     session_id: str | None,
+    notes: str | None = None,
 ) -> None:
-    """Persist claims + reasoning for an execution. Does NOT commit (caller owns tx)."""
+    """Persist claims + reasoning (+ best-effort embedding). Does NOT commit."""
     for claim_text in claims:
         session.add(ExecutionClaim(execution_id=execution_id, claim_text=claim_text))
-    if reasoning is not None or agent_model is not None:
-        session.add(
-            ExecutionReasoning(
-                execution_id=execution_id,
-                reasoning=reasoning,
-                agent_model=agent_model,
-                agent_session_id=session_id,
-            )
+
+    has_reasoning_row = reasoning is not None or agent_model is not None or bool(notes)
+    if not has_reasoning_row:
+        return
+
+    embed_text = " ".join(
+        part for part in [notes, json.dumps(reasoning) if reasoning is not None else None] if part
+    ).strip()
+    embedding = None
+    if embed_text and embeddings.is_available():
+        try:
+            embedding = embeddings.embed(embed_text)
+        except Exception:
+            embedding = None  # best-effort: never fail a run on embedding errors
+
+    session.add(
+        ExecutionReasoning(
+            execution_id=execution_id,
+            reasoning=reasoning,
+            agent_model=agent_model,
+            agent_session_id=session_id,
+            embedding=embedding,
         )
+    )
 
 
 async def _get_execution(session: AsyncSession, execution_id: int) -> Execution:
