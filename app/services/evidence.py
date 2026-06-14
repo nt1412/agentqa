@@ -93,7 +93,12 @@ async def list_unverified_claims(
         stmt = stmt.join(Execution, Execution.id == ExecutionClaim.execution_id)
         if plan_id is not None:
             stmt = stmt.where(Execution.plan_id == plan_id)
-        # project scoping resolves through the plan; left to plan_id for Phase 2b
+        if project_id is not None:
+            stmt = (
+                stmt.join(TestCaseVersion, TestCaseVersion.id == Execution.version_id)
+                .join(TestCase, TestCase.id == TestCaseVersion.case_id)
+                .where(TestCase.project_id == project_id)
+            )
     stmt = stmt.order_by(ExecutionClaim.id)
     return list((await session.execute(stmt)).scalars().all())
 
@@ -195,7 +200,9 @@ async def get_execution_evidence(session: AsyncSession, case_id: int) -> Evidenc
         claim_texts = (
             (
                 await session.execute(
-                    select(ExecutionClaim.claim_text).where(ExecutionClaim.execution_id == ex.id)
+                    select(ExecutionClaim.claim_text)
+                    .where(ExecutionClaim.execution_id == ex.id)
+                    .order_by(ExecutionClaim.id)
                 )
             )
             .scalars()

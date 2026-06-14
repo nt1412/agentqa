@@ -1,4 +1,5 @@
 import base64
+import binascii
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ from app.schemas.evidence import (
     VerificationOut,
 )
 from app.services import evidence
+from app.services.errors import ValidationFailed
 
 router = APIRouter(prefix="/api/v1", tags=["evidence"])
 
@@ -35,7 +37,10 @@ class _ArtifactIn(BaseModel):
 async def upload_artifact(
     execution_id: int, body: _ArtifactIn, session: SessionDep, user: CurrentUser
 ):
-    content = base64.b64decode(body.content)
+    try:
+        content = base64.b64decode(body.content, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise ValidationFailed("content must be valid base64") from e
     return await evidence.upload_artifact(
         session, execution_id, body.artifact_type, body.title, content, body.mime_type
     )

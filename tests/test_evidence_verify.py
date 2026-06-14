@@ -82,3 +82,27 @@ async def test_verify_endpoint(client, auth_headers, session, user):
     )
     assert resp.status_code == 201
     assert resp.json()["verdict"] == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_list_unverified_claims_scoped_by_project(session):
+    # Regression: project_id must actually filter (was accepted but ignored,
+    # leaking claims across projects).
+    ex_a = await _execution_with_claim(session, "VFA")
+    await _execution_with_claim(session, "VFB")  # other project; must be excluded
+    # resolve each execution's project via its version -> case
+    from app.models.execution import Execution
+    from app.models.testcase import TestCase, TestCaseVersion
+
+    async def _project_of(ex_id):
+        ex = await session.get(Execution, ex_id)
+        ver = await session.get(TestCaseVersion, ex.version_id)
+        case = await session.get(TestCase, ver.case_id)
+        return case.project_id
+
+    proj_a = await _project_of(ex_a.id)
+    all_unverified = await evidence.list_unverified_claims(session)
+    assert len(all_unverified) == 2
+    scoped = await evidence.list_unverified_claims(session, project_id=proj_a)
+    assert len(scoped) == 1
+    assert scoped[0].execution_id == ex_a.id

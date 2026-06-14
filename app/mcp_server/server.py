@@ -159,11 +159,15 @@ async def record_test_run(
     session_id: str | None = None,
     claims: list[str] | None = None,
     reasoning: dict | None = None,
+    agent_id: int | None = None,
+    agent_model: str | None = None,
 ) -> dict:
     """Record an execution result. Build is upserted by (plan, build_name).
 
     Optionally attach claims (assertions the agent is proving) and a reasoning
     blob (its chain-of-thought), persisted as evidence for later verification.
+    Pass agent_id (the recording agent's user id) so the run shows up in
+    get_agent_execution_history, and agent_model to capture provenance.
     """
     async with _session() as s:
         ex = await executions.record_execution(
@@ -179,8 +183,9 @@ async def record_test_run(
                 session_id=session_id,
                 claims=claims or [],
                 reasoning=reasoning,
+                agent_model=agent_model,
             ),
-            tester_id=None,  # MCP callers are agents
+            tester_id=agent_id,  # the recording agent's user id (None if anonymous)
         )
         return {
             "id": ex.id,

@@ -67,3 +67,21 @@ async def test_upload_artifact_via_mcp(session):
         execution_id=run["id"], artifact_type="log", title="t", content_base64="aGk="
     )
     assert art["artifact_type"] == "log"
+
+
+@pytest.mark.asyncio
+async def test_record_run_carries_agent_identity(session, user):
+    # Regression: record_test_run must forward agent_id so the run shows up in
+    # get_agent_execution_history (was hardcoded tester_id=None).
+    tc, plan = await _case_plan(session, "MEV4")
+    await mcp.record_test_run(
+        case_id=tc.id,
+        plan_id=plan.id,
+        build_name="b",
+        status="pass",
+        agent_id=user.id,
+        agent_model="claude-sonnet-4-6",
+    )
+    history = await mcp.get_agent_execution_history(agent_id=user.id)
+    assert len(history) == 1
+    assert history[0]["status"] == "pass"
