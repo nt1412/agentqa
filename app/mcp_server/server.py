@@ -17,6 +17,7 @@ from app.services import (
     assignments,
     evidence,
     executions,
+    plans,
     requirements,
     suites,
     testcases,
@@ -449,6 +450,79 @@ async def register_agent(
             "auth_method": user.auth_method,
             "api_key": api_key,
         }
+
+
+# ---------- Test hierarchy & ordering (agent-facing run planning) ----------
+
+
+def _suite_node_dump(node, counts: dict) -> dict:
+    return {
+        "id": node.id,
+        "name": node.name,
+        "parent_id": node.parent_id,
+        "case_count": counts.get(node.id, 0),
+        "children": [_suite_node_dump(c, counts) for c in node.children],
+    }
+
+
+@mcp.tool()
+async def get_suite_tree(project_id: int) -> list[dict]:
+    """The suite hierarchy for a project as a nested tree with per-suite case counts.
+
+    Use this to discover how tests are organized and to run a whole branch
+    (e.g. everything under 'Purple'). Each node: id, name, parent_id,
+    case_count, children[]. Pair with get_test_case / search_test_cases to
+    pull the cases in a chosen suite.
+    """
+    async with _session() as s:
+        tree = await suites.get_tree(s, project_id)
+        counts = await suites.case_counts(s, project_id)
+        return [_suite_node_dump(n, counts) for n in tree]
+
+
+@mcp.tool()
+async def add_cases_to_plan(
+    plan_id: int, case_ids: list[int], urgency: int = 2
+) -> list[dict]:
+    """Add test cases to a plan's run list (appended in order), pinning their
+    current versions. Build the prioritized manifest agents execute. urgency
+    1=low, 2=medium, 3=high. Idempotent per (plan, case version).
+    """
+    async with _session() as s:
+        links = await plans.add_cases(s, plan_id, case_ids, urgency=urgency)
+        return [
+            {"id": link.id, "version_id": link.version_id, "order": link.order}
+            for link in links
+        ]
+
+
+@mcp.tool()
+async def add_test_dependency(case_id: int, depends_on_case_id: int) -> dict:
+    """Record that one test case depends on another (a prerequisite that must
+    pass first). Used for execution gating: get_run_manifest marks a case
+    blocked_by any prerequisite not yet passing. Rejects self-deps,
+    cross-project deps, and cycles.
+    """
+    async with _session() as s:
+        rel = await testcases.add_dependency(s, case_id, depends_on_case_id)
+        return {
+            "case_id": rel.source_id,
+            "depends_on_case_id": rel.dest_id,
+            "relation_type": rel.relation_type,
+        }
+
+
+@mcp.tool()
+async def get_run_manifest(plan_id: int) -> list[dict]:
+    """The ordered, priority- and dependency-aware run list for a plan.
+
+    This is what a QA agent fetches to know WHAT to run and IN WHAT ORDER.
+    Each entry: order, urgency, case_id, external_id, name, importance,
+    latest_status, depends_on, blocked_by, runnable. Run entries top-down;
+    skip any with runnable=false (record them blocked, citing blocked_by).
+    """
+    async with _session() as s:
+        return await plans.get_run_manifest(s, plan_id)
 
 
 # ---------- Deferred tools (registered, bodies land in later phases) ----------

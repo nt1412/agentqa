@@ -1,10 +1,23 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.structure import TestSuite
+from app.models.testcase import TestCase
 from app.schemas.suite import SuiteCreate, SuiteNode
 from app.services.errors import NotFound
 from app.services.projects import get_project
+
+
+async def case_counts(session: AsyncSession, project_id: int) -> dict[int, int]:
+    """Number of test cases directly in each suite of a project."""
+    rows = (
+        await session.execute(
+            select(TestCase.suite_id, func.count(TestCase.id))
+            .where(TestCase.project_id == project_id)
+            .group_by(TestCase.suite_id)
+        )
+    ).all()
+    return {suite_id: count for suite_id, count in rows}
 
 
 async def create_suite(session: AsyncSession, project_id: int, data: SuiteCreate) -> TestSuite:

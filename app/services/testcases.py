@@ -3,9 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.structure import Project, TestSuite
-from app.models.testcase import TestCase, TestCaseVersion, TestStep
+from app.models.testcase import TestCase, TestCaseRelation, TestCaseVersion, TestStep
 from app.schemas.testcase import TestCaseCreate, VersionCreate
-from app.services.errors import NotFound
+from app.services.errors import NotFound, ValidationFailed
+
+DEPENDS_ON = "depends_on"
 
 
 async def _load_full(session: AsyncSession, case_id: int) -> TestCase:
@@ -153,6 +155,78 @@ async def get_by_external_id(session: AsyncSession, project_id: int, external_id
     if tc is None:
         raise NotFound(f"test case '{external_id}' not found")
     return await get_test_case(session, tc.id)
+
+
+async def get_dependencies(session: AsyncSession, case_id: int) -> list[int]:
+    """Prerequisite case ids that ``case_id`` depends on (must pass first)."""
+    rows = await session.execute(
+        select(TestCaseRelation.dest_id).where(
+            TestCaseRelation.source_id == case_id,
+            TestCaseRelation.relation_type == DEPENDS_ON,
+        )
+    )
+    return list(rows.scalars().all())
+
+
+async def _creates_cycle(session: AsyncSession, case_id: int, prerequisite_id: int) -> bool:
+    """True if making case_id depend on prerequisite_id would form a cycle.
+
+    A cycle exists iff prerequisite_id already (transitively) depends on case_id.
+    """
+    stack = [prerequisite_id]
+    seen: set[int] = set()
+    while stack:
+        cur = stack.pop()
+        if cur == case_id:
+            return True
+        if cur in seen:
+            continue
+        seen.add(cur)
+        stack.extend(await get_dependencies(session, cur))
+    return False
+
+
+async def add_dependency(
+    session: AsyncSession, case_id: int, depends_on_case_id: int
+) -> TestCaseRelation:
+    """Record that ``case_id`` depends on ``depends_on_case_id`` (a prerequisite).
+
+    Used for execution gating: the dependent should not run until the
+    prerequisite has passed. Idempotent; rejects self-deps, cross-project
+    deps, and cycles.
+    """
+    if case_id == depends_on_case_id:
+        raise ValidationFailed("a test case cannot depend on itself")
+    dependent = await session.get(TestCase, case_id)
+    if dependent is None:
+        raise NotFound(f"test case {case_id} not found")
+    prereq = await session.get(TestCase, depends_on_case_id)
+    if prereq is None:
+        raise NotFound(f"test case {depends_on_case_id} not found")
+    if dependent.project_id != prereq.project_id:
+        raise ValidationFailed("dependencies must be within the same project")
+    if await _creates_cycle(session, case_id, depends_on_case_id):
+        raise ValidationFailed("dependency would create a cycle")
+
+    existing = (
+        await session.execute(
+            select(TestCaseRelation).where(
+                TestCaseRelation.source_id == case_id,
+                TestCaseRelation.dest_id == depends_on_case_id,
+                TestCaseRelation.relation_type == DEPENDS_ON,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+
+    rel = TestCaseRelation(
+        source_id=case_id, dest_id=depends_on_case_id, relation_type=DEPENDS_ON
+    )
+    session.add(rel)
+    await session.commit()
+    await session.refresh(rel)
+    return rel
 
 
 async def search_test_cases(session: AsyncSession, project_id: int, query: str) -> list[TestCase]:
