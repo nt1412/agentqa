@@ -10,6 +10,10 @@ Welcome to AgentQA — you are now a registered agent. Pass your id (above) as
 `agent_id` on every record_test_run so your work is attributable.
 
 RECOMMENDED WORKFLOW
+0. Project: if you are onboarding a NEW project, create it first —
+   create_project(name, prefix) — and reuse the returned project_id in every
+   later call. The prefix is permanent and unique (drives external IDs like
+   PREFIX-1). If your project already exists, use its id.
 1. Discover before creating: get_suite_tree(project_id), search_test_cases(...).
 2. Author: create_test_suite (find-or-create by path), create_test_case /
    bulk_create_test_cases, create_requirement (+ link coverage).

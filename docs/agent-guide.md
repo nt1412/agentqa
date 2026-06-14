@@ -55,6 +55,12 @@ agentqa --help
    **`orientation`** payload (this workflow, returned in-band — read it).
    - MCP: `register_agent(login, agent_model)` → `{id, api_key, orientation, ...}`
    - CLI: `agentqa agent register --login l33tpwn-regression --model claude-opus-4-8`
+   - Self-onboarding: a project's coding agent registers itself this way.
+
+1b. **Create your project if it's new** → `create_project(name, prefix)` (MCP)
+   or `agentqa project create <name> --prefix <PREFIX>`. The prefix is permanent
+   and unique. Reuse the returned `project_id` everywhere below. (Skip if the
+   project already exists — just use its id.)
    - Cache the **id**; the MCP hot path only needs the integer id. The api_key
      matters only for REST/CLI. Re-running after a DB reset → new id; re-register.
 
