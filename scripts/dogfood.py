@@ -6,12 +6,11 @@ AgentQA project, suites, and cases (so it survives the unique constraints on
 project prefix and (project_id, external_id)), and appends one fresh execution
 per case for the current git build.
 
-Phase-1 gap captured here on purpose: there is NO public API to create a test
-plan or build yet (that is Phase 2a). So this script creates the TestPlan via the
-ORM directly, exactly as the Phase-1 tests do, then records executions through the
-real `executions.record_execution` service (which upserts the build by name). An
-agent restricted to MCP/REST could not yet create the plan — which is the headline
-justification for building the plan/build APIs in Phase 2a.
+Phase 2a gap is now closed: the plan is created through the public `plans` service
+(`app.services.plans.create_plan` / `list_plans`) rather than via the ORM directly.
+An agent restricted to MCP/REST can now create the plan through the public API.
+Executions are recorded through `executions.record_execution` (which upserts the
+build by name).
 
 Data is written to the dev database (app.db.SessionLocal), in a self-contained
 `AgentQA` project (prefix AQA), independent of scripts/seed.py defaults.
@@ -30,7 +29,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
-from app.models.plan import TestPlan
 from app.models.structure import Project
 from app.models.testcase import TestCase, TestCaseScriptLink, TestCaseVersion
 from app.schemas.execution import ExecutionCreate
@@ -128,19 +126,14 @@ async def _get_or_create_case(
     return tc
 
 
-async def _get_or_create_plan(session: AsyncSession, project_id: int) -> TestPlan:
-    plan = (
-        await session.execute(
-            select(TestPlan).where(TestPlan.project_id == project_id, TestPlan.name == PLAN_NAME)
-        )
-    ).scalar_one_or_none()
-    if plan is None:
-        # NOTE: no public API for this in Phase 1 — created via ORM. Phase 2a fills the gap.
-        plan = TestPlan(project_id=project_id, name=PLAN_NAME)
-        session.add(plan)
-        await session.commit()
-        await session.refresh(plan)
-    return plan
+async def _get_or_create_plan(session: AsyncSession, project_id: int):
+    from app.schemas.plan import PlanCreate
+    from app.services import plans
+
+    for existing in await plans.list_plans(session, project_id):
+        if existing.name == PLAN_NAME:
+            return existing
+    return await plans.create_plan(session, project_id, PlanCreate(name=PLAN_NAME))
 
 
 async def main() -> None:
