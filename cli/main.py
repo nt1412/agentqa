@@ -10,10 +10,18 @@ project_app = typer.Typer(help="Manage projects")
 suite_app = typer.Typer(help="Manage suites")
 case_app = typer.Typer(help="Manage test cases")
 run_app = typer.Typer(help="Record/inspect executions")
+plan_app = typer.Typer(help="Manage test plans")
+build_app = typer.Typer(help="Manage builds")
+milestone_app = typer.Typer(help="Manage milestones")
+assign_app = typer.Typer(help="Manage assignments")
 app.add_typer(project_app, name="project")
 app.add_typer(suite_app, name="suite")
 app.add_typer(case_app, name="case")
 app.add_typer(run_app, name="run")
+app.add_typer(plan_app, name="plan")
+app.add_typer(build_app, name="build")
+app.add_typer(milestone_app, name="milestone")
+app.add_typer(assign_app, name="assign")
 
 
 def _request(method: str, path: str, *, json_body=None, params=None) -> dict:
@@ -106,6 +114,80 @@ def run_record(
 @run_app.command("list")
 def run_list(case: int = typer.Option(..., "--case")):
     _print(_request("GET", f"/api/v1/cases/{case}/executions"))
+
+
+@plan_app.command("create")
+def plan_create(project_id: int, name: str = typer.Option(..., "--name")):
+    _print(_request("POST", f"/api/v1/projects/{project_id}/plans", json_body={"name": name}))
+
+
+@plan_app.command("list")
+def plan_list(project_id: int):
+    _print(_request("GET", f"/api/v1/projects/{project_id}/plans"))
+
+
+@plan_app.command("add-case")
+def plan_add_case(plan_id: int, case: int = typer.Option(..., "--case")):
+    _print(_request("POST", f"/api/v1/plans/{plan_id}/cases", json_body={"case_ids": [case]}))
+
+
+@build_app.command("create")
+def build_create(
+    plan_id: int,
+    name: str = typer.Option(..., "--name"),
+    tag: str = typer.Option(None, "--tag"),
+    commit: str = typer.Option(None, "--commit"),
+):
+    body = {"name": name}
+    if tag:
+        body["tag"] = tag
+    if commit:
+        body["commit_id"] = commit
+    _print(_request("POST", f"/api/v1/plans/{plan_id}/builds", json_body=body))
+
+
+@build_app.command("list")
+def build_list(plan_id: int):
+    _print(_request("GET", f"/api/v1/plans/{plan_id}/builds"))
+
+
+@milestone_app.command("create")
+def milestone_create(plan_id: int, name: str = typer.Option(..., "--name")):
+    _print(_request("POST", f"/api/v1/plans/{plan_id}/milestones", json_body={"name": name}))
+
+
+@assign_app.command("create")
+def assign_create(
+    case_id: int,
+    plan: int = typer.Option(..., "--plan"),
+    to: int = typer.Option(..., "--to"),
+    type_: str = typer.Option("human", "--type"),
+):
+    _print(
+        _request(
+            "POST",
+            "/api/v1/assignments",
+            json_body={
+                "case_id": case_id,
+                "plan_id": plan,
+                "assignee_id": to,
+                "assignee_type": type_,
+            },
+        )
+    )
+
+
+@assign_app.command("list")
+def assign_list(
+    plan: int = typer.Option(None, "--plan"),
+    assignee: int = typer.Option(None, "--assignee"),
+):
+    params = {}
+    if plan is not None:
+        params["plan_id"] = plan
+    if assignee is not None:
+        params["assignee_id"] = assignee
+    _print(_request("GET", "/api/v1/assignments", params=params))
 
 
 if __name__ == "__main__":

@@ -49,3 +49,34 @@ def test_case_create_from_file(monkeypatch, tmp_path):
     result = runner.invoke(cli.app, ["case", "create", "5", "--from-file", str(spec)])
     assert result.exit_code == 0
     assert calls[0][2]["json_body"]["name"] == "c"
+
+
+def test_plan_create_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 1})
+    result = runner.invoke(cli.app, ["plan", "create", "5", "--name", "Sprint"])
+    assert result.exit_code == 0
+    assert calls[0][0] == "POST"
+    assert calls[0][1] == "/api/v1/projects/5/plans"
+    assert calls[0][2]["json_body"]["name"] == "Sprint"
+
+
+def test_build_create_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 2})
+    result = runner.invoke(cli.app, ["build", "create", "7", "--name", "v1", "--commit", "abc"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/plans/7/builds"
+    assert calls[0][2]["json_body"]["commit_id"] == "abc"
+
+
+def test_assign_create_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 3})
+    result = runner.invoke(
+        cli.app,
+        ["assign", "create", "4", "--plan", "7", "--to", "9", "--type", "agent"],
+    )
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/assignments"
+    assert calls[0][2]["json_body"]["assignee_id"] == 9
