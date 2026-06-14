@@ -80,6 +80,7 @@ export interface Milestone {
 export interface Execution {
   id: number;
   version_id: number;
+  case_id?: number | null;
   build_id?: number | null;
   plan_id?: number | null;
   tester_id?: number | null;

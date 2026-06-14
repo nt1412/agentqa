@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useApp } from "@/app/providers";
 import { api } from "@/lib/api";
@@ -25,6 +26,7 @@ export default function ActivityPage() {
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [expanded, setExpanded] = useState<number | null>(null);
 
   useEffect(() => {
     if (!currentProject) return;
@@ -124,10 +126,22 @@ export default function ActivityPage() {
                   ? "var(--color-blocked)"
                   : "transparent";
 
+              const isOpen = expanded === entry.id;
+
               return (
+                <div key={`${entry.id}-${idx}`}>
                 <div
-                  key={`${entry.id}-${idx}`}
-                  className={`relative flex items-start gap-4 pl-8 pr-4 py-3 transition-colors hover:bg-[var(--color-bg-elev-2)] ${rowTint}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  onClick={() => setExpanded(isOpen ? null : entry.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpanded(isOpen ? null : entry.id);
+                    }
+                  }}
+                  className={`relative flex items-start gap-4 pl-8 pr-4 py-3 transition-colors cursor-pointer hover:bg-[var(--color-bg-elev-2)] ${rowTint}`}
                   style={{
                     borderLeft: (isFail || isBlocked)
                       ? `2px solid ${borderVar}`
@@ -206,6 +220,84 @@ export default function ActivityPage() {
                   <span className="mono text-[0.6875rem] text-[var(--color-text-faint)] flex-shrink-0 pt-0.5">
                     {new Date(entry.created_at).toLocaleString()}
                   </span>
+
+                  {/* expand chevron */}
+                  <span
+                    className="mono flex-shrink-0 pt-0.5 text-[var(--color-text-faint)] transition-transform"
+                    style={{ transform: isOpen ? "rotate(90deg)" : "none" }}
+                  >
+                    ›
+                  </span>
+                </div>
+
+                {/* expanded detail: the "why" */}
+                {isOpen && (
+                  <div
+                    className="ml-8 mb-1 border-l-2 px-4 py-3 space-y-3 text-sm"
+                    style={{
+                      borderColor: dotColor,
+                      background: "var(--color-bg-elev-2)",
+                    }}
+                  >
+                    <div>
+                      <div className="label mb-1">
+                        why · {entry.status}
+                      </div>
+                      {entry.notes ? (
+                        <p
+                          className="mono text-[0.8125rem] leading-relaxed whitespace-pre-wrap"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          {entry.notes}
+                        </p>
+                      ) : (
+                        <p className="label italic">
+                          no notes recorded for this run
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-8 gap-y-1.5 label">
+                      <span>
+                        recorded by ·{" "}
+                        <span className="text-[var(--color-text-dim)]">
+                          {entry.tester_id
+                            ? `agent #${entry.tester_id}`
+                            : "anonymous"}
+                        </span>
+                      </span>
+                      <span>
+                        version ·{" "}
+                        <span className="text-[var(--color-text-dim)]">
+                          v{entry.version_id}
+                        </span>
+                      </span>
+                      {entry.build_id && (
+                        <span>
+                          build ·{" "}
+                          <span className="text-[var(--color-text-dim)]">
+                            b{entry.build_id}
+                          </span>
+                        </span>
+                      )}
+                      <span>
+                        plan ·{" "}
+                        <span className="text-[var(--color-text-dim)]">
+                          {entry.planName}
+                        </span>
+                      </span>
+                    </div>
+
+                    {entry.case_id && (
+                      <Link
+                        href={`/evidence/${entry.case_id}`}
+                        className="label inline-block text-[var(--color-accent)] hover:underline"
+                      >
+                        full evidence for this test case →
+                      </Link>
+                    )}
+                  </div>
+                )}
                 </div>
               );
             })}

@@ -38,6 +38,7 @@ class ExecutionStepOut(BaseModel):
 class ExecutionOut(BaseModel):
     id: int
     version_id: int
+    case_id: int | None = None  # resolved from version; default keeps untouched paths safe
     build_id: int | None
     plan_id: int | None
     tester_id: int | None

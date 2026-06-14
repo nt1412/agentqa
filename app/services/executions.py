@@ -113,6 +113,28 @@ async def record_execution(
     return await _load(session, execution.id)
 
 
+async def _attach_case_ids(session: AsyncSession, executions: list[Execution]) -> None:
+    """Set a non-mapped ``case_id`` on each execution (resolved via its version).
+
+    ExecutionOut reads it via from_attributes; the default keeps any read path
+    that skips this helper safe. Call after the final load with no commit after,
+    or expire-on-commit would invalidate the attribute.
+    """
+    version_ids = {e.version_id for e in executions}
+    if not version_ids:
+        return
+    rows = (
+        await session.execute(
+            select(TestCaseVersion.id, TestCaseVersion.case_id).where(
+                TestCaseVersion.id.in_(version_ids)
+            )
+        )
+    ).all()
+    by_version = {vid: cid for vid, cid in rows}
+    for e in executions:
+        e.case_id = by_version.get(e.version_id)
+
+
 async def _load(session: AsyncSession, execution_id: int) -> Execution:
     stmt = (
         select(Execution).where(Execution.id == execution_id).options(selectinload(Execution.steps))
@@ -120,6 +142,7 @@ async def _load(session: AsyncSession, execution_id: int) -> Execution:
     ex = (await session.execute(stmt)).scalar_one_or_none()
     if ex is None:
         raise NotFound(f"execution {execution_id} not found")
+    await _attach_case_ids(session, [ex])
     return ex
 
 
@@ -145,7 +168,9 @@ async def list_for_case(session: AsyncSession, case_id: int) -> list[Execution]:
         .order_by(Execution.created_at.desc())
         .options(selectinload(Execution.steps))
     )
-    return list((await session.execute(stmt)).scalars().all())
+    execs = list((await session.execute(stmt)).scalars().all())
+    await _attach_case_ids(session, execs)
+    return execs
 
 
 async def list_for_plan(session: AsyncSession, plan_id: int) -> list[Execution]:
@@ -155,4 +180,6 @@ async def list_for_plan(session: AsyncSession, plan_id: int) -> list[Execution]:
         .order_by(Execution.created_at.desc())
         .options(selectinload(Execution.steps))
     )
-    return list((await session.execute(stmt)).scalars().all())
+    execs = list((await session.execute(stmt)).scalars().all())
+    await _attach_case_ids(session, execs)
+    return execs

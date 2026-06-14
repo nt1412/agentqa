@@ -130,3 +130,20 @@ async def test_execution_endpoint(client, auth_headers, session):
     )
     assert resp.status_code == 201
     assert resp.json()["status"] == "pass"
+
+
+@pytest.mark.asyncio
+async def test_execution_exposes_case_id(session):
+    p, s, tc, plan = await _fixture(session, "EXCID")
+    ex = await executions.record_execution(
+        session,
+        ExecutionCreate(case_id=tc.id, plan_id=plan.id, build_name="b1", status="pass"),
+        tester_id=None,
+    )
+    # record path returns via _load → case_id attached
+    assert ex.case_id == tc.id
+    # list paths attach it too
+    by_plan = await executions.list_for_plan(session, plan.id)
+    assert by_plan[0].case_id == tc.id
+    by_case = await executions.list_for_case(session, tc.id)
+    assert by_case[0].case_id == tc.id
