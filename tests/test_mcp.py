@@ -89,6 +89,8 @@ async def test_register_agent(session):
     assert result["auth_method"] == "agent"
     assert result["agent_model"] == "claude-opus-4-8"
     assert result["api_key"].startswith("aqa_")
+    # registration hands back in-band orientation so the agent is ready to work
+    assert "RECOMMENDED WORKFLOW" in result["orientation"]
 
     # the returned id can attribute a run via get_agent_execution_history
     from app.schemas.project import ProjectCreate as _PC

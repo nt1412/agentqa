@@ -45,3 +45,4 @@ async def test_register_agent_endpoint(client, auth_headers):
     assert data["id"] is not None
     assert data["auth_method"] == "agent"
     assert data["api_key"].startswith("aqa_")
+    assert "RECOMMENDED WORKFLOW" in data["orientation"]

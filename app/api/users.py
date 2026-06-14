@@ -1,6 +1,7 @@
 from fastapi import APIRouter, status
 from pydantic import BaseModel
 
+from app.agent_orientation import AGENT_ORIENTATION
 from app.api.deps import CurrentUser, SessionDep
 from app.services import users
 
@@ -20,13 +21,15 @@ class AgentRegistered(BaseModel):
     agent_model: str | None = None
     auth_method: str
     api_key: str  # returned once — only its hash is stored
+    orientation: str  # in-band onboarding so the agent can use the platform at once
 
 
 @router.post(
     "/users/register-agent", response_model=AgentRegistered, status_code=status.HTTP_201_CREATED
 )
 async def register_agent(body: AgentRegister, session: SessionDep, user: CurrentUser):
-    """Create an agent identity (auth_method='agent') and return a one-time API key."""
+    """Create an agent identity (auth_method='agent'), return a one-time API key
+    plus orientation telling the agent how to use the platform."""
     u, api_key = await users.register_agent(
         session,
         login=body.login,
@@ -40,4 +43,5 @@ async def register_agent(body: AgentRegister, session: SessionDep, user: Current
         agent_model=u.agent_model,
         auth_method=u.auth_method,
         api_key=api_key,
+        orientation=AGENT_ORIENTATION,
     )

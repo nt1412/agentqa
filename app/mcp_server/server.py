@@ -435,13 +435,16 @@ async def register_agent(
 ) -> dict:
     """Register an agent identity so your work is attributable.
 
-    Creates a user with auth_method='agent' and returns its id plus a one-time
-    API key. Call this once at the start of a session, then pass the returned
-    id as agent_id to record_test_run (and as auditor_id to verify_claim /
+    Creates a user with auth_method='agent' and returns its id, a one-time API
+    key, AND an orientation that tells you how to use the platform — read it.
+    Call this once at the start of a session, then pass the returned id as
+    agent_id to record_test_run (and as auditor_id to verify_claim /
     create_audit_report) so your runs show up in get_agent_execution_history.
     The api_key is returned ONCE — save it to authenticate to the REST API;
     only its hash is stored. Pick a unique login (re-using one raises an error).
     """
+    from app.agent_orientation import AGENT_ORIENTATION
+
     async with _session() as s:
         user, api_key = await users.register_agent(
             s,
@@ -456,6 +459,7 @@ async def register_agent(
             "agent_model": user.agent_model,
             "auth_method": user.auth_method,
             "api_key": api_key,
+            "orientation": AGENT_ORIENTATION,
         }
 
 
