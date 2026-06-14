@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from app.db import SessionLocal
 from app.schemas.execution import ExecutionCreate, StepResultIn
 from app.schemas.testcase import StepIn, TestCaseCreate
-from app.services import executions, suites, testcases
+from app.services import assignments, executions, suites, testcases
 
 mcp = FastMCP("agentqa")
 
@@ -181,6 +181,57 @@ async def record_test_run(
         }
 
 
+@mcp.tool()
+async def assign_test(
+    case_id: int,
+    plan_id: int,
+    assignee_id: int,
+    assignee_type: str,
+    deadline: str | None = None,
+) -> dict:
+    """Assign a test case (in a plan) to a human or agent. assignee_type: human|agent."""
+    import datetime as _dt
+
+    parsed_deadline = _dt.datetime.fromisoformat(deadline) if deadline else None
+    async with _session() as s:
+        from app.schemas.assignment import AssignmentCreate
+
+        a = await assignments.create_assignment(
+            s,
+            AssignmentCreate(
+                case_id=case_id,
+                plan_id=plan_id,
+                assignee_id=assignee_id,
+                assignee_type=assignee_type,
+                deadline=parsed_deadline,
+            ),
+            assigner_id=None,  # MCP callers are agents; no human assigner
+        )
+        return {"id": a.id, "status": a.status, "assignee_id": a.assignee_id}
+
+
+@mcp.tool()
+async def list_assignments(
+    plan_id: int | None = None,
+    assignee_id: int | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    """List assignments, optionally filtered — agents poll this to discover work."""
+    async with _session() as s:
+        rows = await assignments.list_assignments(s, plan_id, assignee_id, status)
+        return [
+            {
+                "id": a.id,
+                "case_id": a.case_id,
+                "plan_id": a.plan_id,
+                "assignee_id": a.assignee_id,
+                "assignee_type": a.assignee_type,
+                "status": a.status,
+            }
+            for a in rows
+        ]
+
+
 # ---------- Deferred tools (registered, bodies land in later phases) ----------
 
 _DEFERRED = [
@@ -193,8 +244,6 @@ _DEFERRED = [
     "evaluate_test_case",
     "create_audit_report",
     "get_coverage_gaps",
-    "list_assignments",
-    "assign_test",
     "create_requirement",
     "upload_artifact",
 ]
