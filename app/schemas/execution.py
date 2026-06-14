@@ -22,6 +22,9 @@ class ExecutionCreate(BaseModel):
     duration: int | None = None
     session_id: str | None = None
     run_id: str | None = None
+    claims: list[str] = []
+    reasoning: dict | None = None
+    agent_model: str | None = None
 
 
 class ExecutionStepOut(BaseModel):

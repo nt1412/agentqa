@@ -7,6 +7,7 @@ from app.models.plan import Build, TestPlan
 from app.models.testcase import TestCase, TestCaseVersion, TestStep
 from app.schemas.execution import ExecutionCreate
 from app.services.errors import NotFound, ValidationFailed
+from app.services.evidence import record_claims_and_reasoning
 
 
 async def _resolve_case(session: AsyncSession, data: ExecutionCreate) -> TestCase:
@@ -99,6 +100,14 @@ async def record_execution(
                     notes=sr.notes,
                 )
             )
+    await record_claims_and_reasoning(
+        session,
+        execution.id,
+        data.claims,
+        data.reasoning,
+        data.agent_model,
+        data.session_id,
+    )
     await session.commit()
     return await _load(session, execution.id)
 
