@@ -89,3 +89,11 @@ def test_claim_verify_invokes_post(monkeypatch):
     assert result.exit_code == 0
     assert calls[0][1] == "/api/v1/claims/5/verify"
     assert calls[0][2]["json_body"]["verdict"] == "confirmed"
+
+
+def test_context_failure_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["context", "failure", "7"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/cases/7/failure-context"

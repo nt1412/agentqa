@@ -357,11 +357,26 @@ async def get_agent_execution_history(agent_id: int, project_id: int | None = No
         ]
 
 
+@mcp.tool()
+async def get_failure_context(case_id: int, plan_id: int | None = None, last_n: int = 5) -> dict:
+    """Self-correction bundle: a case's recent failures, step failures, reasoning,
+    artifacts, and semantically similar failures elsewhere."""
+    async with _session() as s:
+        ctx = await evidence.get_failure_context(s, case_id, plan_id, last_n)
+        return ctx.model_dump(mode="json")
+
+
+@mcp.tool()
+async def search_similar_failures(case_id: int, n: int = 5) -> list[dict]:
+    """Find failures across other cases whose reasoning is semantically closest."""
+    async with _session() as s:
+        rows = await evidence.search_similar_failures(s, case_id, n)
+        return [r.model_dump() for r in rows]
+
+
 # ---------- Deferred tools (registered, bodies land in later phases) ----------
 
 _DEFERRED = [
-    "get_failure_context",
-    "search_similar_failures",
     "get_coverage_gaps",
     "create_requirement",
 ]

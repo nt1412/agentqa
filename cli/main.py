@@ -16,6 +16,7 @@ milestone_app = typer.Typer(help="Manage milestones")
 assign_app = typer.Typer(help="Manage assignments")
 evidence_app = typer.Typer(help="Evidence & artifacts")
 claim_app = typer.Typer(help="Claims & verification")
+context_app = typer.Typer(help="Self-correction context")
 app.add_typer(project_app, name="project")
 app.add_typer(suite_app, name="suite")
 app.add_typer(case_app, name="case")
@@ -26,6 +27,7 @@ app.add_typer(milestone_app, name="milestone")
 app.add_typer(assign_app, name="assign")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(claim_app, name="claim")
+app.add_typer(context_app, name="context")
 
 
 def _request(method: str, path: str, *, json_body=None, params=None) -> dict:
@@ -208,6 +210,17 @@ def claim_unverified(plan: int = typer.Option(None, "--plan")):
 @claim_app.command("verify")
 def claim_verify(claim_id: int, verdict: str = typer.Option(..., "--verdict")):
     _print(_request("POST", f"/api/v1/claims/{claim_id}/verify", json_body={"verdict": verdict}))
+
+
+@context_app.command("failure")
+def context_failure(case_id: int, plan: int = typer.Option(None, "--plan")):
+    params = {"plan_id": plan} if plan is not None else None
+    _print(_request("GET", f"/api/v1/cases/{case_id}/failure-context", params=params))
+
+
+@context_app.command("similar")
+def context_similar(case_id: int, n: int = typer.Option(5, "--n")):
+    _print(_request("GET", f"/api/v1/cases/{case_id}/similar-failures", params={"n": n}))
 
 
 if __name__ == "__main__":
