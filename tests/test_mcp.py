@@ -80,3 +80,34 @@ async def test_record_test_run(session):
     )
     assert run["status"] == "pass"
     assert run["build_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_register_agent(session):
+    result = await mcp.register_agent(login="mcp-qa-bot", agent_model="claude-opus-4-8")
+    assert result["id"] is not None
+    assert result["auth_method"] == "agent"
+    assert result["agent_model"] == "claude-opus-4-8"
+    assert result["api_key"].startswith("aqa_")
+
+    # the returned id can attribute a run via get_agent_execution_history
+    from app.schemas.project import ProjectCreate as _PC
+
+    p = await projects.create_project(session, _PC(name="RA", prefix="RAG"))
+    await mcp.create_test_suite(project_id=p.id, path="S")
+    case = await mcp.create_test_case(project_id=p.id, suite_path="S", name="c")
+    from app.models.plan import TestPlan
+
+    plan = TestPlan(project_id=p.id, name="P")
+    session.add(plan)
+    await session.commit()
+    await session.refresh(plan)
+    await mcp.record_test_run(
+        case_id=case["id"],
+        plan_id=plan.id,
+        build_name="b1",
+        status="pass",
+        agent_id=result["id"],
+    )
+    history = await mcp.get_agent_execution_history(agent_id=result["id"], project_id=p.id)
+    assert len(history) == 1

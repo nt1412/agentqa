@@ -13,7 +13,15 @@ from mcp.server.fastmcp import FastMCP
 from app.db import SessionLocal
 from app.schemas.execution import ExecutionCreate, StepResultIn
 from app.schemas.testcase import StepIn, TestCaseCreate
-from app.services import assignments, evidence, executions, requirements, suites, testcases
+from app.services import (
+    assignments,
+    evidence,
+    executions,
+    requirements,
+    suites,
+    testcases,
+    users,
+)
 
 mcp = FastMCP("agentqa")
 
@@ -408,6 +416,39 @@ async def get_coverage_gaps(project_id: int, spec_id: int | None = None) -> list
     async with _session() as s:
         gaps = await requirements.get_coverage_gaps(s, project_id, spec_id)
         return [g.model_dump() for g in gaps]
+
+
+@mcp.tool()
+async def register_agent(
+    login: str,
+    agent_model: str | None = None,
+    email: str | None = None,
+    display_name: str | None = None,
+) -> dict:
+    """Register an agent identity so your work is attributable.
+
+    Creates a user with auth_method='agent' and returns its id plus a one-time
+    API key. Call this once at the start of a session, then pass the returned
+    id as agent_id to record_test_run (and as auditor_id to verify_claim /
+    create_audit_report) so your runs show up in get_agent_execution_history.
+    The api_key is returned ONCE — save it to authenticate to the REST API;
+    only its hash is stored. Pick a unique login (re-using one raises an error).
+    """
+    async with _session() as s:
+        user, api_key = await users.register_agent(
+            s,
+            login=login,
+            agent_model=agent_model,
+            email=email,
+            display_name=display_name,
+        )
+        return {
+            "id": user.id,
+            "login": user.login,
+            "agent_model": user.agent_model,
+            "auth_method": user.auth_method,
+            "api_key": api_key,
+        }
 
 
 # ---------- Deferred tools (registered, bodies land in later phases) ----------
