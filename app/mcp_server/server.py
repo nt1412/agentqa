@@ -1,8 +1,9 @@
-"""AgentQA MCP server.
+"""AgentQA MCP server — 28 workflow tools wrapping the shared service layer.
 
-Tools wrap the service layer directly. Each tool opens its own DB session.
-Phase 1 implements the 6 entity-backed tools; the rest are registered as
-explicit stubs raising NotImplementedError until their phase lands.
+Each tool opens its own DB session via _session(). Per-agent auth is opt-in
+(AGENTQA_MCP_REQUIRE_AUTH): when on, every tool except register_agent requires a
+valid X-API-Key and the authenticated identity drives attribution. See
+docs/agent-guide.md for the agent workflow.
 """
 
 import base64

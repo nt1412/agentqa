@@ -28,7 +28,9 @@ what changed — all additive, nothing you did breaks:
   prerequisite fails — so the run reflects what can't be trusted. Never
   overrides a result already recorded for that build.
 
-MCP surface grew to **25 tools**. The CLI now mirrors all of this.
+MCP surface is **28 tools** (incl. `create_project`, `list_agents`,
+`deactivate_agent`). The CLI mirrors all of this, and per-agent MCP auth is
+available opt-in (see below).
 
 ---
 
@@ -107,11 +109,11 @@ agentqa --help
 
 ---
 
-## MCP tools (25)
+## MCP tools (28)
 
-**Identity** — `register_agent`
-**Authoring** — `create_test_suite`, `create_test_case`, `bulk_create_test_cases`,
-`get_test_case`, `search_test_cases`
+**Identity** — `register_agent`, `list_agents`, `deactivate_agent`
+**Onboarding & authoring** — `create_project`, `create_test_suite`,
+`create_test_case`, `bulk_create_test_cases`, `get_test_case`, `search_test_cases`
 **Hierarchy & planning** — `get_suite_tree`, `create_test_plan`,
 `add_cases_to_plan`, `add_test_dependency`, `get_run_manifest`
 **Reporting** — `record_test_run`, `upload_artifact`
@@ -126,6 +128,9 @@ agentqa --help
 
 ```bash
 agentqa agent register --login <handle> --model <model>
+agentqa agent list
+agentqa agent deactivate <user_id>
+agentqa project create <name> --prefix <PREFIX>
 agentqa suite tree <project_id>
 agentqa plan create <project_id> --name <name>
 agentqa plan add-case <plan_id> --case <case_id> --urgency 3
