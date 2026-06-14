@@ -1,17 +1,14 @@
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy import text
-
-from sqlalchemy import delete
-
-from app.db import get_session
-from app.main import create_app
-from app.models.user import User
-from app.services import auth as auth_service
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import app.models  # noqa: F401  ensure all models are registered
+from app.db import get_session
+from app.main import create_app
 from app.models.base import Base
+from app.models.user import User
+from app.services import auth as auth_service
 
 TEST_DB_URL = "postgresql+asyncpg://agentqa:agentqa@localhost:5432/agentqa_test"
 ADMIN_URL = "postgresql+asyncpg://agentqa:agentqa@localhost:5432/agentqa"
@@ -42,10 +39,21 @@ async def engine(_create_test_db):
 
 @pytest_asyncio.fixture
 async def session(engine) -> AsyncSession:
-    maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-    async with maker() as s:
-        yield s
-        await s.rollback()
+    # True per-test isolation: bind the session to a single connection inside an
+    # outer transaction. join_transaction_mode="create_savepoint" turns in-test
+    # session.commit() calls into savepoint releases, so the outer rollback below
+    # undoes ALL work (even committed rows) at teardown — no cross-test leakage.
+    async with engine.connect() as conn:
+        trans = await conn.begin()
+        maker = async_sessionmaker(
+            bind=conn,
+            expire_on_commit=False,
+            class_=AsyncSession,
+            join_transaction_mode="create_savepoint",
+        )
+        async with maker() as s:
+            yield s
+        await trans.rollback()
 
 
 @pytest_asyncio.fixture
@@ -78,9 +86,7 @@ async def user(session) -> User:
     session.add(u)
     await session.commit()
     await session.refresh(u)
-    yield u
-    await session.execute(delete(User).where(User.id == u.id))
-    await session.commit()
+    return u
 
 
 @pytest_asyncio.fixture
