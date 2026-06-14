@@ -131,6 +131,20 @@ async def get_test_case(session: AsyncSession, case_id: int):
     return out
 
 
+async def list_cases_in_suite(session: AsyncSession, suite_id: int):
+    """List cases in a suite, each as a TestCaseOut with its current version."""
+    ids = (
+        (
+            await session.execute(
+                select(TestCase.id).where(TestCase.suite_id == suite_id).order_by(TestCase.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [await get_test_case(session, cid) for cid in ids]
+
+
 async def get_by_external_id(session: AsyncSession, project_id: int, external_id: str):
     stmt = select(TestCase).where(
         TestCase.project_id == project_id, TestCase.external_id == external_id

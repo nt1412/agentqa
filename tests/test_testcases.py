@@ -135,3 +135,29 @@ async def test_endpoints(client, auth_headers):
     cid = cc.json()["id"]
     got = await client.get(f"/api/v1/cases/{cid}", headers=auth_headers)
     assert got.json()["current_version"]["steps"][0]["action"] == "do"
+
+
+@pytest.mark.asyncio
+async def test_list_cases_in_suite(session):
+    p, s = await _project_and_suite(session, "LCS")
+    await testcases.create_test_case(session, s.id, TestCaseCreate(name="a"))
+    await testcases.create_test_case(session, s.id, TestCaseCreate(name="b"))
+    rows = await testcases.list_cases_in_suite(session, s.id)
+    assert [r.name for r in rows] == ["a", "b"]
+    assert rows[0].current_version is not None
+
+
+@pytest.mark.asyncio
+async def test_list_cases_in_suite_endpoint(client, auth_headers):
+    pc = await client.post(
+        "/api/v1/projects", json={"name": "P", "prefix": "LCE"}, headers=auth_headers
+    )
+    pid = pc.json()["id"]
+    sc = await client.post(
+        f"/api/v1/projects/{pid}/suites", json={"name": "S"}, headers=auth_headers
+    )
+    sid = sc.json()["id"]
+    await client.post(f"/api/v1/suites/{sid}/cases", json={"name": "c"}, headers=auth_headers)
+    resp = await client.get(f"/api/v1/suites/{sid}/cases", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()[0]["name"] == "c"

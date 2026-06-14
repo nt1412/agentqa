@@ -15,6 +15,11 @@ async def create(suite_id: int, body: TestCaseCreate, session: SessionDep, user:
     return await testcases.get_test_case(session, tc.id)
 
 
+@router.get("/suites/{suite_id}/cases", response_model=list[TestCaseOut])
+async def list_in_suite(suite_id: int, session: SessionDep, user: CurrentUser):
+    return await testcases.list_cases_in_suite(session, suite_id)
+
+
 @router.get("/cases/{case_id}", response_model=TestCaseOut)
 async def get_one(case_id: int, session: SessionDep, user: CurrentUser):
     return await testcases.get_test_case(session, case_id)
