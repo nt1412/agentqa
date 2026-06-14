@@ -18,6 +18,7 @@ from app.schemas.evidence import (
     CaseEvaluation,
     EvidenceBundle,
     EvidenceExecution,
+    SimilarFailure,
 )
 from app.services.errors import NotFound
 
@@ -252,3 +253,45 @@ async def get_agent_execution_history(
         )
     stmt = stmt.order_by(Execution.created_at.desc())
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def search_similar_failures(
+    session: AsyncSession, case_id: int, n: int = 5
+) -> list[SimilarFailure]:
+    # query vector = most recent embedded execution for this case
+    q = (
+        select(ExecutionReasoning.embedding)
+        .select_from(ExecutionReasoning)
+        .join(Execution, Execution.id == ExecutionReasoning.execution_id)
+        .join(TestCaseVersion, TestCaseVersion.id == Execution.version_id)
+        .where(
+            TestCaseVersion.case_id == case_id,
+            ExecutionReasoning.embedding.is_not(None),
+        )
+        .order_by(Execution.created_at.desc())
+        .limit(1)
+    )
+    query_vec = (await session.execute(q)).scalars().first()
+    if query_vec is None:
+        return []
+
+    distance = ExecutionReasoning.embedding.cosine_distance(query_vec)
+    stmt = (
+        select(Execution.id, TestCaseVersion.case_id, Execution.status, distance.label("distance"))
+        .select_from(ExecutionReasoning)
+        .join(Execution, Execution.id == ExecutionReasoning.execution_id)
+        .join(TestCaseVersion, TestCaseVersion.id == Execution.version_id)
+        .where(
+            ExecutionReasoning.embedding.is_not(None),
+            TestCaseVersion.case_id != case_id,
+        )
+        .order_by(distance)
+        .limit(n)
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        SimilarFailure(
+            execution_id=r.id, case_id=r.case_id, status=r.status, distance=float(r.distance)
+        )
+        for r in rows
+    ]

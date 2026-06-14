@@ -13,6 +13,7 @@ from app.schemas.evidence import (
     CaseEvaluation,
     ClaimOut,
     EvidenceBundle,
+    SimilarFailure,
     VerificationCreate,
     VerificationOut,
 )
@@ -90,3 +91,8 @@ async def agent_history(
     agent_id: int, session: SessionDep, user: CurrentUser, project_id: int | None = None
 ):
     return await evidence.get_agent_execution_history(session, agent_id, project_id)
+
+
+@router.get("/cases/{case_id}/similar-failures", response_model=list[SimilarFailure])
+async def similar_failures(case_id: int, session: SessionDep, user: CurrentUser, n: int = 5):
+    return await evidence.search_similar_failures(session, case_id, n)

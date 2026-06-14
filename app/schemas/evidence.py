@@ -94,3 +94,10 @@ class AgentExecutionOut(BaseModel):
     created_at: dt.datetime
 
     model_config = {"from_attributes": True}
+
+
+class SimilarFailure(BaseModel):
+    execution_id: int
+    case_id: int
+    status: str
+    distance: float
