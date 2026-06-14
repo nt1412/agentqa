@@ -18,10 +18,12 @@ re-run after a reset or after scripts/dogfood.py adds new cases.
 
 import asyncio
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import SessionLocal
+from app.models.requirement import ReqCoverage
 from app.models.structure import Project
+from app.models.testcase import TestCase, TestCaseVersion
 from app.schemas.requirement import ReqSpecCreate, RequirementCreate
 from app.services import plans, requirements, suites, testcases
 
@@ -30,9 +32,11 @@ PLAN_NAME = "CI"
 SPEC_DOC_ID = "AQA-SRS"
 SPEC_NAME = "AgentQA Platform — Software Requirements"
 
-# requirement doc id -> (name, suites whose cases cover it)
+# requirement doc id -> (name, suites whose cases cover it). Covers every test
+# module (suite); a catch-all in main() absorbs any suite added later so coverage
+# never silently drifts.
 REQUIREMENTS: list[tuple[str, str, list[str]]] = [
-    ("REQ-AUTH-1", "Authentication, JWT sessions, and agent API keys", ["auth"]),
+    ("REQ-AUTH-1", "Authentication, JWT sessions, and agent identities", ["auth", "users"]),
     ("REQ-PROJ-1", "Projects and hierarchical test suites", ["projects", "suites"]),
     ("REQ-CASE-1", "Versioned test cases with ordered steps", ["testcases"]),
     ("REQ-PLAN-1", "Test plans, builds, and milestones", ["plans", "builds", "milestones"]),
@@ -43,11 +47,31 @@ REQUIREMENTS: list[tuple[str, str, list[str]]] = [
     ("REQ-CLI-1", "CLI coverage of the REST surface", ["cli"]),
     ("REQ-SVC-1", "Transport-agnostic service-layer integrity", ["services"]),
     ("REQ-SEED-1", "Seed / bootstrap of roles and admin", ["seed"]),
+    (
+        "REQ-EVIDENCE-1",
+        "Evidence, artifacts, claims & audit",
+        [
+            "evidence_verify", "evidence_bundle", "evidence_artifacts",
+            "evidence_claims", "evidence_audit", "mcp_evidence", "storage",
+        ],
+    ),
+    (
+        "REQ-TRACE-1",
+        "Requirements, coverage & traceability",
+        ["requirements", "coverage", "mcp_requirements"],
+    ),
+    (
+        "REQ-SELFCORRECT-1",
+        "Failure context & similar-failure search",
+        ["failure_context", "similar_failures", "mcp_failure", "embeddings"],
+    ),
+    ("REQ-HIER-1", "Test hierarchy, ordering & dependency gating", ["hierarchy", "mcp_hierarchy"]),
 ]
 
-# run-plan layers in architectural order: (suites, urgency 1=low 2=med 3=high)
+# run-plan layers in architectural order: (suites, urgency 1=low 2=med 3=high).
+# A catch-all layer in main() appends any suites not listed here.
 PLAN_LAYERS: list[tuple[list[str], int]] = [
-    (["auth", "services", "seed"], 3),
+    (["auth", "services", "seed", "users"], 3),
     (["projects", "suites", "testcases", "platforms"], 3),
     (["plans", "builds", "milestones"], 2),
     (["executions"], 3),
@@ -101,6 +125,22 @@ async def main() -> None:
         plan = await _get_or_create_plan(session, proj.id)
         suite_cases = await _suite_cases(session, proj.id)
 
+        # self-healing: any suite not named in REQUIREMENTS / PLAN_LAYERS is
+        # absorbed by a catch-all so coverage never silently drifts as the test
+        # suite grows new modules.
+        mapped = {s for _, _, names in REQUIREMENTS for s in names}
+        extra = sorted(set(suite_cases) - mapped)
+        requirements_to_apply = list(REQUIREMENTS)
+        if extra:
+            requirements_to_apply.append(
+                ("REQ-MISC-1", "Other test coverage (auto-mapped suites)", extra)
+            )
+        planned = {s for names, _ in PLAN_LAYERS for s in names}
+        plan_layers = list(PLAN_LAYERS)
+        extra_plan = sorted(set(suite_cases) - planned)
+        if extra_plan:
+            plan_layers.append((extra_plan, 2))
+
         # 1. requirements spec (idempotent by doc_id)
         existing_specs = await requirements.list_req_specs(session, proj.id)
         spec = next((s for s in existing_specs if s.doc_id == SPEC_DOC_ID), None)
@@ -113,7 +153,7 @@ async def main() -> None:
         reqs_in_spec = await requirements.list_requirements(session, spec.id)
         existing_reqs = {r.req_doc_id: r for r in reqs_in_spec}
         req_count = cov_count = 0
-        for doc_id, name, suite_names in REQUIREMENTS:
+        for doc_id, name, suite_names in requirements_to_apply:
             case_ids = [cid for sn in suite_names for cid in suite_cases.get(sn, [])]
             if doc_id in existing_reqs:
                 links = await requirements.link_requirement_coverage(
@@ -131,7 +171,7 @@ async def main() -> None:
 
         # 3. fill the run plan, layer by layer, with urgency (add_cases appends in
         #    order and is idempotent — re-adding an existing case is a no-op)
-        for suite_names, urgency in PLAN_LAYERS:
+        for suite_names, urgency in plan_layers:
             ids = [cid for sn in suite_names for cid in suite_cases.get(sn, [])]
             if ids:
                 await plans.add_cases(session, plan.id, ids, urgency=urgency)
@@ -148,11 +188,24 @@ async def main() -> None:
         # 5. report back through the service layer
         gaps = await requirements.get_coverage_gaps(session, proj.id)
         manifest = await plans.get_run_manifest(session, plan.id)
+        # guard: cases NOT linked to any requirement (should be 0 with the catch-all)
+        uncovered = (
+            await session.execute(
+                select(func.count(TestCase.id)).where(
+                    TestCase.project_id == proj.id,
+                    ~select(ReqCoverage.id)
+                    .join(TestCaseVersion, TestCaseVersion.id == ReqCoverage.case_version_id)
+                    .where(TestCaseVersion.case_id == TestCase.id)
+                    .exists(),
+                )
+            )
+        ).scalar_one()
 
     print(f"project={proj.name} (#{proj.id})  spec={SPEC_DOC_ID}  plan={PLAN_NAME} (#{plan.id})")
-    print(f"requirements: +{req_count} new (total {len(REQUIREMENTS)})  coverage_links={cov_count}")
+    total_reqs = len(REQUIREMENTS) + (1 if extra else 0)
+    print(f"requirements: +{req_count} new (total {total_reqs})  coverage_links={cov_count}")
     print(f"run plan: {len(manifest)} cases  dependencies={dep_count}")
-    print(f"coverage_gaps={len(gaps)}")
+    print(f"coverage_gaps={len(gaps)}  uncovered_cases={uncovered}")
 
 
 if __name__ == "__main__":
