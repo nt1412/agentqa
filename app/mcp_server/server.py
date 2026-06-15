@@ -21,6 +21,7 @@ from app.services import (
     assignments,
     evidence,
     executions,
+    lineage,
     plans,
     projects,
     requirements,
@@ -305,6 +306,8 @@ async def record_test_run(
     build_name: str,
     status: str,
     commit_id: str | None = None,
+    branch: str | None = None,
+    base_commit: str | None = None,
     step_results: list[dict] | None = None,
     notes: str | None = None,
     session_id: str | None = None,
@@ -321,6 +324,10 @@ async def record_test_run(
     Pass agent_id (the recording agent's user id) so the run shows up in
     get_agent_execution_history, and agent_model to capture provenance.
 
+    For branch-aware lineage, pass branch (the branch this build ran on) and
+    base_commit (git merge-base HEAD <default-branch>) so the branch's delta vs
+    main resolves precisely. Both are backfilled once per (plan, build_name).
+
     When status is fail/blocked and cascade_blocked is true (default), cases
     downstream of this one (via add_test_dependency) that are in the same plan
     are auto-recorded 'blocked' for this build — so the run reflects what can't
@@ -334,6 +341,8 @@ async def record_test_run(
                 plan_id=plan_id,
                 build_name=build_name,
                 commit_id=commit_id,
+                branch=branch,
+                base_commit=base_commit,
                 status=status,
                 step_results=[StepResultIn(**sr) for sr in (step_results or [])],
                 notes=notes,
@@ -581,6 +590,33 @@ async def get_coverage_gaps(project_id: int, spec_id: int | None = None) -> list
     async with _session() as s:
         gaps = await requirements.get_coverage_gaps(s, project_id, spec_id)
         return [g.model_dump() for g in gaps]
+
+
+# ---------- lineage: build/commit/run history ----------
+
+
+@mcp.tool()
+async def list_build_timeline(plan_id: int) -> list[dict]:
+    """Builds for a plan, newest first, each with commit/branch and a
+    pass/fail/blocked/not_run rollup + pass_rate. The build timeline."""
+    async with _session() as s:
+        return await lineage.list_builds_enriched(s, plan_id)
+
+
+@mcp.tool()
+async def get_build_detail(build_id: int) -> dict:
+    """A build's header (commit, branch, base_commit), its rollup, and each
+    case's latest result in that build (collapsing re-runs to the latest)."""
+    async with _session() as s:
+        return await lineage.build_detail(s, build_id)
+
+
+@mcp.tool()
+async def get_case_history(case_id: int) -> dict:
+    """A case's latest result per build, chronological (build, branch, commit,
+    status), plus derived broke/fixed transitions — the known regression path."""
+    async with _session() as s:
+        return await lineage.case_history(s, case_id)
 
 
 @mcp.tool()

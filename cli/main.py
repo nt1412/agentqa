@@ -134,6 +134,8 @@ def run_record(
     from_file: Path = typer.Option(None, "--steps-file"),  # noqa: B008
     notes: str = typer.Option(None, "--notes"),
     commit: str = typer.Option(None, "--commit"),
+    branch: str = typer.Option(None, "--branch"),
+    base_commit: str = typer.Option(None, "--base-commit"),
     cascade: bool = typer.Option(False, "--cascade/--no-cascade"),
 ):
     body = {"case_id": case_id, "plan_id": plan, "build_name": build, "status": status}
@@ -143,12 +145,34 @@ def run_record(
         body["notes"] = notes
     if commit:
         body["commit_id"] = commit
+    if branch:
+        body["branch"] = branch
+    if base_commit:
+        body["base_commit"] = base_commit
     _print(_request("POST", "/api/v1/executions", json_body=body, params={"cascade": cascade}))
 
 
 @run_app.command("list")
 def run_list(case: int = typer.Option(..., "--case")):
     _print(_request("GET", f"/api/v1/cases/{case}/executions"))
+
+
+@build_app.command("timeline")
+def build_timeline(plan_id: int):
+    """Builds for a plan, newest first, each with its pass/fail/blocked/not_run rollup."""
+    _print(_request("GET", f"/api/v1/plans/{plan_id}/build-timeline"))
+
+
+@build_app.command("detail")
+def build_detail(build_id: int):
+    """Build header + rollup + each case's latest result in the build."""
+    _print(_request("GET", f"/api/v1/builds/{build_id}"))
+
+
+@case_app.command("history")
+def case_history(case_id: int):
+    """A case's latest result per build, chronological, with broke/fixed transitions."""
+    _print(_request("GET", f"/api/v1/cases/{case_id}/history"))
 
 
 @plan_app.command("create")

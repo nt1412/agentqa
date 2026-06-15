@@ -16,6 +16,8 @@ class ExecutionCreate(BaseModel):
     plan_id: int | None = None
     build_name: str
     commit_id: str | None = None
+    branch: str | None = None  # the branch this build ran on (for branch-aware lineage)
+    base_commit: str | None = None  # merge-base on default branch (precise baseline)
     status: str  # pass|fail|blocked|not_run|in_progress
     step_results: list[StepResultIn] = []
     notes: str | None = None

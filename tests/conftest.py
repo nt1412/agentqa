@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import app.models  # noqa: F401  ensure all models are registered
 from app.db import get_session
+from app.db_views import CREATE_VIEWS_SQL
 from app.main import create_app
 from app.models.base import Base
 from app.models.user import User
@@ -34,6 +35,10 @@ async def engine(_create_test_db):
     async with eng.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
+        # Views aren't ORM tables, so create_all doesn't make them. Build them
+        # from the same SQL the Alembic migration uses (single source of truth).
+        for sql in CREATE_VIEWS_SQL:
+            await conn.execute(text(sql))
     yield eng
     await eng.dispose()
 

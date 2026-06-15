@@ -43,6 +43,9 @@ class Build(Base, TimestampMixin):
     tag: Mapped[str | None] = mapped_column(String(128))
     branch: Mapped[str | None] = mapped_column(String(128))
     commit_id: Mapped[str | None] = mapped_column(String(64))
+    # merge-base on the default branch this build forked from — supplied by the
+    # recorder (git merge-base HEAD main) so branch deltas resolve precisely.
+    base_commit: Mapped[str | None] = mapped_column(String(64))
     release_date: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
 

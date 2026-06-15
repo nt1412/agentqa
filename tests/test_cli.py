@@ -117,6 +117,43 @@ def test_req_link_coverage_invokes_post(monkeypatch):
     assert calls[0][2]["json_body"]["case_ids"] == [9, 10]
 
 
+def test_build_timeline_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])
+    result = runner.invoke(cli.app, ["build", "timeline", "7"])
+    assert result.exit_code == 0
+    assert calls[0] == ("GET", "/api/v1/plans/7/build-timeline", {})
+
+
+def test_build_detail_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["build", "detail", "12"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/builds/12"
+
+
+def test_case_history_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["case", "history", "5"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/cases/5/history"
+
+
+def test_run_record_passes_branch_and_base_commit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 1})
+    result = runner.invoke(
+        cli.app,
+        ["run", "record", "5", "--plan", "7", "--build", "b1", "--status", "pass",
+         "--branch", "feature/x", "--base-commit", "main999"],
+    )
+    assert result.exit_code == 0
+    assert calls[0][2]["json_body"]["branch"] == "feature/x"
+    assert calls[0][2]["json_body"]["base_commit"] == "main999"
+
+
 def test_agent_register_invokes_post(monkeypatch):
     calls = []
     monkeypatch.setattr(

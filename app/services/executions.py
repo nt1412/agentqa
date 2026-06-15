@@ -46,7 +46,12 @@ async def _current_version_id(session: AsyncSession, case_id: int) -> int:
 
 
 async def _upsert_build(
-    session: AsyncSession, plan_id: int | None, build_name: str, commit_id: str | None
+    session: AsyncSession,
+    plan_id: int | None,
+    build_name: str,
+    commit_id: str | None,
+    branch: str | None = None,
+    base_commit: str | None = None,
 ) -> int | None:
     if plan_id is None:
         return None
@@ -56,11 +61,24 @@ async def _upsert_build(
     stmt = select(Build).where(Build.plan_id == plan_id, Build.name == build_name)
     build = (await session.execute(stmt)).scalar_one_or_none()
     if build is None:
-        build = Build(plan_id=plan_id, name=build_name, commit_id=commit_id)
+        build = Build(
+            plan_id=plan_id,
+            name=build_name,
+            commit_id=commit_id,
+            branch=branch,
+            base_commit=base_commit,
+        )
         session.add(build)
         await session.flush()
-    elif commit_id and not build.commit_id:
-        build.commit_id = commit_id
+    else:
+        # backfill once: the first recorder to supply each field wins, later runs
+        # for the same (plan, build_name) don't clobber it.
+        if commit_id and not build.commit_id:
+            build.commit_id = commit_id
+        if branch and not build.branch:
+            build.branch = branch
+        if base_commit and not build.base_commit:
+            build.base_commit = base_commit
     return build.id
 
 
@@ -139,7 +157,9 @@ async def record_execution(
     case = await _resolve_case(session, data)
     case_id, case_external_id = case.id, case.external_id  # capture before commit expires them
     version_id = await _current_version_id(session, case.id)
-    build_id = await _upsert_build(session, data.plan_id, data.build_name, data.commit_id)
+    build_id = await _upsert_build(
+        session, data.plan_id, data.build_name, data.commit_id, data.branch, data.base_commit
+    )
 
     execution = Execution(
         plan_id=data.plan_id,
