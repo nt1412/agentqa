@@ -61,37 +61,60 @@ workflow, then `register_agent` to get its identity.
 
 ---
 
-## 2. Tell your agent to use it (project rules)
+## 2. Make AQA part of the TDD loop (project rules)
 
-The connection only makes the tools *available*. To make AQA part of the loop, add
-a block like this to your coding agent's instructions — `CLAUDE.md`, `AGENTS.md`,
-`.cursorrules`, or a system prompt:
+Connecting (§1) only makes the tools *available* — it doesn't make the agent *call*
+them. The rules file your tool reads **every turn** is what fires the behavior at the
+right moments: **Claude Code → `CLAUDE.md`**, **Cursor → `.cursorrules`** (or
+`.cursor/rules/*.mdc`), **Codex → `AGENTS.md`**, or a system prompt. Paste this block
+and tune to your stack:
 
 ```markdown
-## Verification with AQA (the team's test-management memory)
+## AQA loop (required, not optional)
 
-You have an `aqa` MCP server. Use it to make your verification durable and checkable.
+You have an `aqa` MCP server — the team's test-management + verification memory.
 
-- Once per session: `register_agent(login=..., agent_model=...)`, then follow the
-  `orientation` it returns. Reuse the returned id as `agent_id`.
-- If this is a new project, `create_project(name, prefix)` and reuse its id.
-- **Before fixing a bug:** capture it as a test case (`create_test_case`) under a
-  meaningful suite. A fixed bug with no case will come back — encode it so it can't.
-- **After any change:** run the relevant cases and `record_test_run` with the real
-  `status`, your `commit_id`, and a per-commit `build_name`. "Done" means recorded.
-- **Don't fake green:** if a case can't run (needs an env you don't have), record it
-  `blocked`, not `pass`.
-- **Claims you can't self-verify:** when you assert an invariant holds, attach it as
-  a `claim` on the run. A separate auditor will confirm/refute it — do not verify
-  your own claims.
-- **Find blind spots:** check `get_coverage_gaps(project_id)` and write tests for
-  untested requirements.
-- **Encode prerequisites:** use `add_test_dependency` so a downstream case is gated
-  on its prerequisite (a "pass" downstream of a broken prereq is a lie).
+- Once per session: `register_agent(login, agent_model)` → follow the returned
+  `orientation`; reuse the returned id as `agent_id`. New project? `create_project`.
+- **When a requirement is finalized — BEFORE writing code:**
+  `create_requirement(spec_id, req_doc_id, name)`. It now shows up in
+  `get_coverage_gaps` as unfinished work.
+- **TDD:** write the FAILING test first (`create_test_case` under a meaningful
+  suite). When it passes, `link_coverage(req_id, [case_id])` to close the gap.
+  "Done" means the requirement's coverage gap is closed.
+- **After any change:** `record_test_run(case_id, plan_id, build_name, status,
+  commit_id, branch, base_commit)`. Record the real status — if a case can't run,
+  record `blocked`, never fake `pass`.
+- **Before investigating a failure:** `get_known_regressions(project_id, branch)`.
+  If a cached fix-path comes back, use it instead of re-deriving (saves an expensive
+  investigation).
+- **Claims you can't self-verify:** attach a `claim` to the run; a separate auditor
+  confirms/refutes it (see §3). Don't verify your own claims.
+- **Encode prerequisites:** `add_test_dependency` so a downstream case is gated on
+  its prerequisite (a "pass" downstream of a broken prereq is a lie).
+- **Never claim done** while `get_coverage_gaps(project_id)` still lists your
+  requirement.
 ```
 
-Tune to your stack; the point is that *recording in AQA is part of "done,"* not an
-afterthought.
+The point: *registering the requirement and closing its coverage gap is part of
+"done,"* not an afterthought.
+
+### Enforce it (don't rely on the model remembering)
+
+For "**whenever** X, do Y", make the harness enforce it deterministically rather than
+trusting the prompt:
+
+- **Claude Code hooks** (`.claude/settings.json`): a `Stop` hook that runs
+  `aqa req gaps <project_id>` and blocks completion while gaps remain; a `PostToolUse`
+  hook on `Write|Edit` of `tests/**` to nudge `link_coverage`.
+- **CI:** record results on every push (see §5) so attribution happens even if an
+  agent forgets — `scripts/dogfood.py` imports a JUnit run through the REST front door.
+- **Plan templates:** if you generate task plans, bake the touchpoints into each task
+  — register requirement → RED → `link_coverage` → GREEN → `record_test_run`.
+
+**Layering:** MCP = capability (§1), rules file = intent (flexible, model-driven),
+hooks/CI = enforcement (deterministic, unskippable). Use rules for the loop and a
+`Stop`/CI gate for "coverage gaps must be 0."
 
 ---
 
@@ -146,6 +169,12 @@ AQA_MCP_TRANSPORT=streamable-http python -m app.mcp_server.server
 Then agents send `X-API-Key: <their key>` on every call, and **registration**
 requires `X-Enroll-Key: <join-secret>` (so open registration can't mint keys).
 Revoke an agent with `deactivate_agent` / `aqa agent deactivate <id>`.
+
+**Cold-start over REST/CLI.** Only the MCP `register_agent` is open onboarding by
+default. An agent driving the **REST/CLI** (e.g. Cursor/Codex via the `aqa` CLI) can
+still mint its own identity by passing the same enrollment secret — `X-Enroll-Key`
+header (REST) or `aqa agent register --enroll-key …` / `AQA_ENROLL_KEY` env (CLI). It
+fails closed: with no secret configured, REST/CLI registration is refused.
 
 ---
 
