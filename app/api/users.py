@@ -1,9 +1,11 @@
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel
 
 from app.agent_orientation import AGENT_ORIENTATION
-from app.api.deps import CurrentUser, SessionDep
-from app.services import users
+from app.api.deps import CurrentUser, OptionalUser, SessionDep
+from app.services import auth, users
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
 
@@ -36,9 +38,24 @@ class AgentSummary(BaseModel):
 @router.post(
     "/users/register-agent", response_model=AgentRegistered, status_code=status.HTTP_201_CREATED
 )
-async def register_agent(body: AgentRegister, session: SessionDep, user: CurrentUser):
+async def register_agent(
+    body: AgentRegister,
+    session: SessionDep,
+    user: OptionalUser,
+    x_enroll_key: Annotated[str | None, Header()] = None,
+):
     """Create an agent identity (auth_method='agent'), return a one-time API key
-    plus orientation telling the agent how to use the platform."""
+    plus orientation telling the agent how to use the platform.
+
+    Cold-start: an unauthenticated caller may register by supplying a valid
+    X-Enroll-Key (the operator's enrollment secret) — so an agent can bootstrap
+    its own identity over REST/CLI, matching the MCP register_agent path. Fails
+    closed when no enrollment secret is configured."""
+    if user is None and not auth.enrollment_allows(x_enroll_key):
+        raise HTTPException(
+            status_code=401,
+            detail="register-agent requires authentication or a valid X-Enroll-Key",
+        )
     u, api_key = await users.register_agent(
         session,
         login=body.login,

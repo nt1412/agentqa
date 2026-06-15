@@ -47,12 +47,14 @@ app.add_typer(req_app, name="req")
 app.add_typer(agent_app, name="agent")
 
 
-def _request(method: str, path: str, *, json_body=None, params=None) -> dict:
+def _request(method: str, path: str, *, json_body=None, params=None, extra_headers=None) -> dict:
     base = _env("AQA_API_URL", "http://localhost:8000")
     headers = {}
     api_key = _env("AQA_API_KEY")
     if api_key:
         headers["X-API-Key"] = api_key
+    if extra_headers:
+        headers.update(extra_headers)
     resp = httpx.request(method, base + path, headers=headers, json=json_body, params=params)
     resp.raise_for_status()
     return resp.json()
@@ -443,11 +445,15 @@ def agent_register(
     model: str = typer.Option(None, "--model"),
     email: str = typer.Option(None, "--email"),
     name: str = typer.Option(None, "--name"),
+    enroll_key: str = typer.Option(None, "--enroll-key"),
 ):
     """Create an agent identity; prints a one-time API key. Pass the returned
-    id as the tester for attributable runs."""
+    id as the tester for attributable runs. For cold-start (no existing key),
+    supply --enroll-key (or AQA_ENROLL_KEY) — the operator's enrollment secret."""
     body = {"login": login, "agent_model": model, "email": email, "display_name": name}
-    _print(_request("POST", "/api/v1/users/register-agent", json_body=body))
+    key = enroll_key or _env("AQA_ENROLL_KEY")
+    extra = {"X-Enroll-Key": key} if key else None
+    _print(_request("POST", "/api/v1/users/register-agent", json_body=body, extra_headers=extra))
 
 
 @agent_app.command("list")

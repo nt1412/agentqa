@@ -69,3 +69,13 @@ async def user_from_api_key(session: AsyncSession, api_key: str) -> User:
     if user is None or not user.active:
         raise Unauthorized("invalid api key")
     return user
+
+
+def enrollment_allows(provided: str | None) -> bool:
+    """True iff the supplied enrollment key matches the configured secret. Fails
+    closed: if no AQA_MCP_ENROLL_KEY (or legacy AGENTQA_ fallback) is set, no key
+    is ever accepted — so cold-start agent registration must be deliberately enabled."""
+    import os
+
+    secret = os.environ.get("AQA_MCP_ENROLL_KEY") or os.environ.get("AGENTQA_MCP_ENROLL_KEY")
+    return bool(secret) and provided == secret

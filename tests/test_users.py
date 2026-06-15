@@ -78,3 +78,43 @@ async def test_list_and_deactivate_agent_endpoints(client, auth_headers):
     d = await client.delete(f"/api/v1/users/{aid}", headers=auth_headers)
     assert d.status_code == 200
     assert d.json()["active"] is False
+
+
+@pytest.mark.asyncio
+async def test_register_agent_cold_start_with_enroll_key(client, monkeypatch):
+    # an unauthenticated agent can bootstrap its identity with the enrollment secret
+    monkeypatch.setenv("AQA_MCP_ENROLL_KEY", "join-123")
+    r = await client.post(
+        "/api/v1/users/register-agent",
+        headers={"X-Enroll-Key": "join-123"},
+        json={"login": "cold-agent", "agent_model": "m"},
+    )
+    assert r.status_code == 201
+    assert r.json()["api_key"]
+
+
+@pytest.mark.asyncio
+async def test_register_agent_cold_start_rejected_without_valid_key(client, monkeypatch):
+    monkeypatch.setenv("AQA_MCP_ENROLL_KEY", "join-123")
+    # no key
+    r = await client.post("/api/v1/users/register-agent", json={"login": "ca2"})
+    assert r.status_code == 401
+    # wrong key
+    r2 = await client.post(
+        "/api/v1/users/register-agent",
+        headers={"X-Enroll-Key": "wrong"},
+        json={"login": "ca3"},
+    )
+    assert r2.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_register_agent_cold_start_fails_closed_without_secret(client, monkeypatch):
+    monkeypatch.delenv("AQA_MCP_ENROLL_KEY", raising=False)
+    monkeypatch.delenv("AGENTQA_MCP_ENROLL_KEY", raising=False)
+    r = await client.post(
+        "/api/v1/users/register-agent",
+        headers={"X-Enroll-Key": "anything"},
+        json={"login": "ca4"},
+    )
+    assert r.status_code == 401
