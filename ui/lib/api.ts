@@ -9,6 +9,7 @@ import type {
   Build,
   BranchStatus,
   BuildDetail,
+  CaseStatusMap,
   BuildDiff,
   CaseHistory,
   Claim,
@@ -186,6 +187,9 @@ export const api = {
       `/builds/${buildId}/rerun`,
       { assignee_id: assigneeId, case_id: caseId },
     ),
+
+  caseStatusMap: (projectId: number) =>
+    request<CaseStatusMap>("GET", `/projects/${projectId}/case-status`),
 
   // health + collaboration (phase 2)
   projectHealth: (projectId: number) =>

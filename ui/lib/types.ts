@@ -389,3 +389,10 @@ export interface Annotation {
   text: string;
   created_at: string;
 }
+
+export interface CaseStatusEntry {
+  latest_status: string;
+  recent: string[];
+}
+
+export type CaseStatusMap = Record<string, CaseStatusEntry>;
