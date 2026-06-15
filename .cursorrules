@@ -1,0 +1,19 @@
+# AQA — working agreement for coding agents (Cursor)
+
+This repo dogfoods AQA (test-management + verification memory). Recording in AQA is
+part of "done". MCP: http://localhost:8001/mcp · REST: http://localhost:8000 · `aqa` CLI.
+Full recipes: docs/integrating-with-agents.md.
+
+AQA verification loop (required, not optional):
+1. Requirement finalized → create_requirement(spec_id, req_doc_id, name) BEFORE code
+   (it shows in get_coverage_gaps until covered).
+2. TDD → write the FAILING test first; on green, link_coverage(req_id, [case_id]).
+   "Done" = the gap is closed.
+3. After a change → record_test_run(case_id, plan_id, build_name, status, commit_id,
+   branch, base_commit) where base_commit = `git merge-base HEAD main`.
+4. Before investigating a failure → get_known_regressions(project_id, branch); reuse a
+   cached fix-path instead of re-deriving.
+5. Don't claim done while get_coverage_gaps(project_id) lists your requirement.
+
+Onboarding over REST/CLI needs AQA_ENROLL_KEY (sent as X-Enroll-Key); only MCP
+register_agent is open onboarding.
