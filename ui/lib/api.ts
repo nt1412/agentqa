@@ -6,11 +6,17 @@ import type {
   Artifact,
   Assignment,
   Build,
+  BranchStatus,
+  BuildDetail,
+  BuildDiff,
+  CaseHistory,
   Claim,
   CoverageGap,
+  EnrichedBuild,
   EvidenceBundle,
   Execution,
   FailureContext,
+  KnownRegression,
   Milestone,
   Plan,
   Platform,
@@ -156,4 +162,26 @@ export const api = {
   // assignments
   assignments: (planId?: number) =>
     request<Assignment[]>("GET", "/assignments", undefined, { plan_id: planId }),
+
+  agents: () => request<{ id: number; login: string }[]>("GET", "/users/agents"),
+
+  // lineage
+  buildTimeline: (planId: number) =>
+    request<EnrichedBuild[]>("GET", `/plans/${planId}/build-timeline`),
+  buildDetail: (buildId: number) => request<BuildDetail>("GET", `/builds/${buildId}`),
+  buildCompare: (buildId: number, to: string | number = "baseline") =>
+    request<BuildDiff>("GET", `/builds/${buildId}/compare`, undefined, { to: String(to) }),
+  caseHistory: (caseId: number) => request<CaseHistory>("GET", `/cases/${caseId}/history`),
+  branchStatus: (projectId: number) =>
+    request<BranchStatus[]>("GET", `/projects/${projectId}/branches`),
+  knownRegressions: (projectId: number, branch?: string) =>
+    request<KnownRegression[]>("GET", `/projects/${projectId}/known-regressions`, undefined, {
+      branch,
+    }),
+  requestRerun: (buildId: number, assigneeId: number, caseId?: number) =>
+    request<{ id: number; case_id: number; build_id: number; status: string }[]>(
+      "POST",
+      `/builds/${buildId}/rerun`,
+      { assignee_id: assigneeId, case_id: caseId },
+    ),
 };

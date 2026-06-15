@@ -235,3 +235,115 @@ export interface User {
 
 export type Status = "pass" | "fail" | "blocked" | "not_run" | "in_progress";
 export type Verdict = "confirmed" | "refuted" | "inconclusive";
+
+/* ---------- lineage ---------- */
+
+export interface BuildRollup {
+  build_id: number;
+  plan_id: number;
+  pass: number;
+  fail: number;
+  blocked: number;
+  not_run: number;
+  executed: number;
+  plan_cases: number;
+  pass_rate: number;
+}
+
+export interface EnrichedBuild {
+  id: number;
+  plan_id: number;
+  name: string;
+  branch?: string | null;
+  commit_id?: string | null;
+  base_commit?: string | null;
+  created_at?: string | null;
+  rollup: BuildRollup;
+}
+
+export interface BuildCaseResult {
+  case_id: number;
+  status: string;
+  execution_id: number;
+  duration?: number | null;
+  external_id?: string | null;
+  name?: string | null;
+}
+
+export interface BuildDetail {
+  build: Omit<EnrichedBuild, "rollup">;
+  rollup: BuildRollup;
+  cases: BuildCaseResult[];
+}
+
+export interface CaseHistoryExec {
+  build_id: number;
+  build_name: string;
+  branch?: string | null;
+  commit_id?: string | null;
+  status: string;
+  execution_id: number;
+  created_at?: string | null;
+}
+
+export interface CaseTransition {
+  type: "broke" | "fixed";
+  commit_id?: string | null;
+  build_id: number;
+}
+
+export interface CaseHistory {
+  case_id: number;
+  executions: CaseHistoryExec[];
+  transitions: CaseTransition[];
+}
+
+export interface DiffEntry {
+  case_id: number;
+  external_id?: string | null;
+  name?: string | null;
+  baseline_status?: string | null;
+  build_status?: string | null;
+}
+
+export interface BuildDiff {
+  build_id: number;
+  baseline_build_id: number | null;
+  classes: Record<string, DiffEntry[]>;
+}
+
+export interface BranchPlanBreakdown {
+  plan_id: number;
+  build_id: number;
+  baseline_build_id: number | null;
+  regressions: number;
+  fixed: number;
+  new_test: number;
+}
+
+export interface BranchStatus {
+  branch: string;
+  head_commit?: string | null;
+  verdict: "BLOCKED" | "READY";
+  regressions: number;
+  fixed: number;
+  new_test: number;
+  plans: BranchPlanBreakdown[];
+}
+
+export interface FixPath {
+  broke_commit?: string | null;
+  fixed_commit?: string | null;
+  fixing_execution_id?: number | null;
+  reasoning?: Record<string, unknown> | null;
+}
+
+export interface KnownRegression {
+  branch: string;
+  plan_id: number;
+  build_id: number;
+  case_id: number;
+  external_id?: string | null;
+  name?: string | null;
+  fix_path: FixPath | null;
+}

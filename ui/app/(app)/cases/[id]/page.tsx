@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApp } from "@/app/providers";
 import { api } from "@/lib/api";
-import type { Execution, TestCase } from "@/lib/types";
+import type { CaseHistory, Execution, TestCase } from "@/lib/types";
 import {
   Button,
   Cell,
   EmptyState,
   Panel,
   Row,
+  Sparkline,
   Spinner,
   StatusBadge,
   Table,
@@ -26,6 +27,7 @@ export default function CaseEditorPage() {
 
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [executions, setExecutions] = useState<Execution[]>([]);
+  const [history, setHistory] = useState<CaseHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -35,12 +37,14 @@ export default function CaseEditorPage() {
     setNotFound(false);
     (async () => {
       try {
-        const [tc, execs] = await Promise.all([
+        const [tc, execs, hist] = await Promise.all([
           api.case(caseId),
           api.caseExecutions(caseId).catch(() => [] as Execution[]),
+          api.caseHistory(caseId).catch(() => null),
         ]);
         setTestCase(tc);
         setExecutions(execs);
+        setHistory(hist);
       } catch {
         setNotFound(true);
       } finally {
@@ -137,6 +141,39 @@ export default function CaseEditorPage() {
           </div>
         )}
       </Panel>
+
+      {/* Run lineage — per-build sparkline + derived broke/fixed path */}
+      {history && history.executions.length > 0 && (
+        <Panel title="run lineage">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="label">across builds</span>
+              <Sparkline
+                points={history.executions.map((e) => ({
+                  status: e.status,
+                  title: `${e.build_name} · ${e.commit_id?.slice(0, 7) ?? "no commit"} · ${e.status}`,
+                }))}
+              />
+              <span className="mono text-[0.6875rem] text-[var(--color-text-faint)]">
+                oldest → newest
+              </span>
+            </div>
+            {history.transitions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="label">transitions</span>
+                {history.transitions.map((t, i) => (
+                  <Tag
+                    key={i}
+                    color={t.type === "broke" ? "var(--color-fail)" : "var(--color-pass)"}
+                  >
+                    {t.type} {t.commit_id?.slice(0, 7) ?? ""}
+                  </Tag>
+                ))}
+              </div>
+            )}
+          </div>
+        </Panel>
+      )}
 
       {/* Execution history */}
       <Panel title="execution history" pad={false}>

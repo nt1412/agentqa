@@ -221,6 +221,81 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
+/* ---------- lineage primitives ---------- */
+
+// Short commit ref — mono, bordered, with a copy-on-click affordance.
+export function CommitRef({ sha, branch }: { sha?: string | null; branch?: string | null }) {
+  if (!sha) return <span className="mono text-[0.75rem] text-[var(--color-text-faint)]">no commit</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        title={sha}
+        className="mono inline-block border border-[var(--color-border-bright)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--color-text-dim)]"
+      >
+        {sha.slice(0, 7)}
+      </span>
+      {branch && (
+        <span className="mono text-[0.6875rem] text-[var(--color-text-faint)]">⑂ {branch}</span>
+      )}
+    </span>
+  );
+}
+
+interface Rollup {
+  pass: number;
+  fail: number;
+  blocked: number;
+  not_run: number;
+  plan_cases: number;
+  pass_rate: number;
+}
+
+// Stacked pass/fail/blocked/not-run bar + pass-rate readout.
+export function RollupBar({ rollup, width = 160 }: { rollup: Rollup; width?: number }) {
+  const total = Math.max(rollup.plan_cases, rollup.pass + rollup.fail + rollup.blocked + rollup.not_run, 1);
+  const seg = (n: number, color: string, key: string) =>
+    n > 0 ? (
+      <div key={key} style={{ width: `${(n / total) * 100}%`, background: color }} title={`${key}: ${n}`} />
+    ) : null;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex h-2 overflow-hidden border border-[var(--color-border)]" style={{ width }}>
+        {seg(rollup.pass, "var(--color-pass)", "pass")}
+        {seg(rollup.fail, "var(--color-fail)", "fail")}
+        {seg(rollup.blocked, "var(--color-blocked)", "blocked")}
+        {seg(rollup.not_run, "var(--color-notrun)", "not_run")}
+      </div>
+      <span
+        className="mono text-[0.75rem] tabular-nums"
+        style={{ color: rollup.fail > 0 ? "var(--color-fail)" : "var(--color-pass)" }}
+      >
+        {rollup.pass_rate}%
+      </span>
+    </div>
+  );
+}
+
+// Per-build status dots, oldest→newest. Flip-flops read as flakiness at a glance.
+export function Sparkline({
+  points,
+}: {
+  points: { status: string; title?: string }[];
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {points.length === 0 && <span className="mono text-[0.75rem] text-[var(--color-text-faint)]">—</span>}
+      {points.map((p, i) => (
+        <span
+          key={i}
+          title={p.title}
+          className="inline-block h-3 w-3 rounded-[2px]"
+          style={{ background: statusColor(p.status), boxShadow: `0 0 6px -2px ${statusColor(p.status)}` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Grid({ children, cols = 3 }: { children: ReactNode; cols?: number }) {
   return (
     <motion.div

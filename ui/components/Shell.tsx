@@ -15,6 +15,13 @@ const NAV: { group: string; items: { href: string; label: string; glyph: string 
     ],
   },
   {
+    group: "Lineage",
+    items: [
+      { href: "/builds", label: "Builds", glyph: "◳" },
+      { href: "/branches", label: "Branches", glyph: "⑂" },
+    ],
+  },
+  {
     group: "Supervision",
     items: [
       { href: "/activity", label: "Activity", glyph: "≋" },
