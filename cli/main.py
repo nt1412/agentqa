@@ -260,9 +260,16 @@ def branch_status(project_id: int):
 
 
 @branch_app.command("known-regressions")
-def branch_known_regressions(project_id: int, branch: str = typer.Option(None, "--branch")):
-    """Open regressions + known fix-paths (call before investigating a failure)."""
-    params = {"branch": branch} if branch else None
+def branch_known_regressions(
+    project_id: int,
+    branch: str = typer.Option(None, "--branch"),
+    record: bool = typer.Option(True, "--record/--no-record", help="log avoided re-investigations"),
+):
+    """Open regressions + known fix-paths (call before investigating a failure).
+    Records avoided re-investigations by default (--no-record to just inspect)."""
+    params: dict = {"record": record}
+    if branch:
+        params["branch"] = branch
     _print(_request("GET", f"/api/v1/projects/{project_id}/known-regressions", params=params))
 
 

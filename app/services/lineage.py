@@ -5,7 +5,7 @@ per-case history — the data spine for the operator console.
 
 import datetime as dt
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.plan import Build, TestPlan, TestPlanCase
@@ -461,6 +461,29 @@ async def known_regressions(
     return out
 
 
+async def record_guard_hits(
+    session: AsyncSession, project_id: int, regressions: list[dict]
+) -> int:
+    """Log each regression served WITH a cached fix-path as an avoided
+    re-investigation. Call this from the agent-facing guard surfaces (not from
+    health/UI reads). Returns the number of hits recorded."""
+    from app.models.meta import GuardHit
+
+    hits = [r for r in regressions if r.get("fix_path") is not None]
+    for r in hits:
+        session.add(
+            GuardHit(
+                project_id=project_id,
+                case_id=r["case_id"],
+                branch=r.get("branch"),
+                fixed_commit=(r.get("fix_path") or {}).get("fixed_commit"),
+            )
+        )
+    if hits:
+        await session.commit()
+    return len(hits)
+
+
 async def case_status_map(
     session: AsyncSession, project_id: int, recent_limit: int = 8
 ) -> dict[int, dict]:
@@ -563,6 +586,15 @@ async def project_health(
 
     regressions = await known_regressions(session, project_id)
     avoidable = sum(1 for r in regressions if r["fix_path"] is not None)
+    from app.models.meta import GuardHit
+
+    avoided = (
+        await session.execute(
+            select(func.count())
+            .select_from(GuardHit)
+            .where(GuardHit.project_id == project_id)
+        )
+    ).scalar_one()
     return {
         "project_id": project_id,
         "plans": plan_cards,
@@ -570,6 +602,7 @@ async def project_health(
         "flaky_candidates": flaky_candidates,
         "open_regressions": len(regressions),
         "reinvestigations_avoidable": avoidable,
+        "reinvestigations_avoided": avoided,
     }
 
 

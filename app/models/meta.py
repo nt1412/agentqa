@@ -1,8 +1,26 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+import datetime as dt
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
+
+
+class GuardHit(Base):
+    """One row each time the known-regression guard served a cached fix-path to a
+    caller — i.e. an expensive re-investigation was avoided. The health metric
+    'reinvestigations_avoided' counts these (actual), vs 'avoidable' (point-in-time)."""
+
+    __tablename__ = "guard_hits"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, index=True)
+    case_id: Mapped[int] = mapped_column(Integer, index=True)
+    branch: Mapped[str | None] = mapped_column(String(128))
+    fixed_commit: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class CustomField(Base):

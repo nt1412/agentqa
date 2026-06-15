@@ -681,9 +681,13 @@ async def get_known_regressions(
     """Call this BEFORE investigating a failure. Returns open regressions on active
     branches, each annotated with its known fix-path (the commit that broke it, the
     commit that fixed it last time, and the prior reasoning) when one exists. A hit
-    means an expensive re-investigation can be skipped — the answer is cached."""
+    means an expensive re-investigation can be skipped — the answer is cached.
+    Each cached fix served here is logged as a re-investigation avoided (feeds the
+    health 'reinvestigations_avoided' metric)."""
     async with _session() as s:
-        return _json_safe(await lineage.known_regressions(s, project_id, branch, case_ids))
+        regs = await lineage.known_regressions(s, project_id, branch, case_ids)
+        await lineage.record_guard_hits(s, project_id, regs)
+        return _json_safe(regs)
 
 
 @mcp.tool()

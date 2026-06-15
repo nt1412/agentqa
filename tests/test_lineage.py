@@ -401,3 +401,43 @@ async def test_case_status_map_latest_and_recent(session):
     assert smap[run.id]["recent"] == ["pass", "fail", "pass"]  # oldest→newest
     # a never-run case is absent (UI renders it as not_run)
     assert never.id not in smap
+
+
+# ---------- guard-hit logging → actually-avoided metric (B6) ----------
+
+
+@pytest.mark.asyncio
+async def test_guard_hits_feed_actually_avoided_metric(session):
+    p, _, cases, plan = await _project_with_cases(session, "AVOID", n=1)
+    c = cases[0]
+    await plans.add_cases(session, plan.id, [c.id])
+    # completed broke→fixed history, then a fresh regression on a branch
+    await _record(session, c.id, plan.id, "m1b", "pass", commit_id="m1", branch="main")
+    await _record(session, c.id, plan.id, "m2b", "fail", commit_id="m2", branch="main")
+    await _record(
+        session, c.id, plan.id, "m3b", "pass", commit_id="m3", branch="main",
+        reasoning={"root_cause": "x"},
+    )
+    await _record(
+        session, c.id, plan.id, "fb", "fail",
+        commit_id="h1", branch="feature/x", base_commit="m3",
+    )
+
+    regs = await lineage.known_regressions(session, p.id)
+    assert len(regs) == 1 and regs[0]["fix_path"] is not None
+
+    # before any guard invocation: avoidable=1 (cached fix exists), avoided=0
+    health = await lineage.project_health(session, p.id)
+    assert health["reinvestigations_avoidable"] == 1
+    assert health["reinvestigations_avoided"] == 0
+
+    # an agent invokes the guard and is served the cached fix → log it
+    n = await lineage.record_guard_hits(session, p.id, regs)
+    assert n == 1
+    health = await lineage.project_health(session, p.id)
+    assert health["reinvestigations_avoided"] == 1  # actual, logged
+
+    # a second invocation accrues another avoided re-investigation
+    await lineage.record_guard_hits(session, p.id, regs)
+    health = await lineage.project_health(session, p.id)
+    assert health["reinvestigations_avoided"] == 2

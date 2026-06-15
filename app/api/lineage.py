@@ -55,9 +55,17 @@ async def project_health(project_id: int, session: SessionDep, user: CurrentUser
 
 @router.get("/projects/{project_id}/known-regressions")
 async def known_regressions(
-    project_id: int, session: SessionDep, user: CurrentUser, branch: str | None = None
+    project_id: int,
+    session: SessionDep,
+    user: CurrentUser,
+    branch: str | None = None,
+    record: bool = False,
 ):
     """Open regressions on active branches, each annotated with its known fix-path
     (broke@→fixed@ + prior reasoning) when one exists — the pre-flight that saves
-    re-investigating an already-diagnosed failure."""
-    return await lineage.known_regressions(session, project_id, branch)
+    re-investigating an already-diagnosed failure. Pass ?record=true when this is
+    an agent guard invocation (logs avoided re-investigations); the UI omits it."""
+    regs = await lineage.known_regressions(session, project_id, branch)
+    if record:
+        await lineage.record_guard_hits(session, project_id, regs)
+    return regs
