@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && .venv/bin/python -m scripts.coverage_gate"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && .venv/bin/python -m scripts.link_coverage_nudge"
+          }
+        ]
+      }
+    ]
+  }
+}
