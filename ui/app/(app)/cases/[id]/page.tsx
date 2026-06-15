@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApp } from "@/app/providers";
 import { api } from "@/lib/api";
-import type { CaseHistory, Execution, TestCase } from "@/lib/types";
+import type { Annotation, CaseHistory, Execution, TestCase } from "@/lib/types";
 import {
   Button,
   Cell,
   EmptyState,
+  Input,
   Panel,
   Row,
   Sparkline,
@@ -28,6 +29,8 @@ export default function CaseEditorPage() {
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [history, setHistory] = useState<CaseHistory | null>(null);
+  const [notes, setNotes] = useState<Annotation[]>([]);
+  const [noteText, setNoteText] = useState("");
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -37,14 +40,16 @@ export default function CaseEditorPage() {
     setNotFound(false);
     (async () => {
       try {
-        const [tc, execs, hist] = await Promise.all([
+        const [tc, execs, hist, anns] = await Promise.all([
           api.case(caseId),
           api.caseExecutions(caseId).catch(() => [] as Execution[]),
           api.caseHistory(caseId).catch(() => null),
+          api.annotations("case", caseId).catch(() => [] as Annotation[]),
         ]);
         setTestCase(tc);
         setExecutions(execs);
         setHistory(hist);
+        setNotes(anns);
       } catch {
         setNotFound(true);
       } finally {
@@ -52,6 +57,14 @@ export default function CaseEditorPage() {
       }
     })();
   }, [caseId]);
+
+  async function addNote() {
+    const text = noteText.trim();
+    if (!text) return;
+    const created = await api.addAnnotation("case", caseId, text);
+    setNotes((n) => [...n, created]);
+    setNoteText("");
+  }
 
   if (loading) return <Spinner label="loading case" />;
   if (notFound || !testCase) return <EmptyState title="case not found" hint={`id ${caseId} does not exist`} />;
@@ -174,6 +187,37 @@ export default function CaseEditorPage() {
           </div>
         </Panel>
       )}
+
+      {/* Notes / annotations — the collaboration trail */}
+      <Panel title="notes">
+        <div className="space-y-3">
+          {notes.length === 0 ? (
+            <p className="label !text-[var(--color-text-faint)]">no notes yet</p>
+          ) : (
+            <div className="space-y-2">
+              {notes.map((n) => (
+                <div key={n.id} className="border border-[var(--color-border)] px-3 py-2">
+                  <div className="text-sm text-[var(--color-text-dim)]">{n.text}</div>
+                  <div className="label mt-1 !text-[var(--color-text-faint)]">
+                    #{n.author_id ?? "?"} · {new Date(n.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Input
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addNote()}
+              placeholder="add a note…"
+            />
+            <Button onClick={addNote} disabled={!noteText.trim()}>
+              add
+            </Button>
+          </div>
+        </div>
+      </Panel>
 
       {/* Execution history */}
       <Panel title="execution history" pad={false}>

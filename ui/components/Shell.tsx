@@ -32,6 +32,7 @@ const NAV: { group: string; items: { href: string; label: string; glyph: string 
   {
     group: "Insight",
     items: [
+      { href: "/health", label: "Health", glyph: "✚" },
       { href: "/traceability", label: "Traceability", glyph: "⊞" },
       { href: "/reports", label: "Reports", glyph: "▤" },
     ],

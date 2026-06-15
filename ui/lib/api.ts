@@ -3,6 +3,7 @@
 // localStorage on each call so it survives reloads.
 
 import type {
+  Annotation,
   Artifact,
   Assignment,
   Build,
@@ -19,6 +20,7 @@ import type {
   KnownRegression,
   Milestone,
   Plan,
+  ProjectHealth,
   Platform,
   Project,
   Requirement,
@@ -184,4 +186,26 @@ export const api = {
       `/builds/${buildId}/rerun`,
       { assignee_id: assigneeId, case_id: caseId },
     ),
+
+  // health + collaboration (phase 2)
+  projectHealth: (projectId: number) =>
+    request<ProjectHealth>("GET", `/projects/${projectId}/health`),
+  setQuarantine: (caseId: number, quarantined: boolean) =>
+    request<{ id: number; external_id: string; quarantined: boolean }>(
+      "POST",
+      `/cases/${caseId}/quarantine`,
+      undefined,
+      { quarantined: String(quarantined) },
+    ),
+  annotations: (entityType: string, entityId: number) =>
+    request<Annotation[]>("GET", "/annotations", undefined, {
+      entity_type: entityType,
+      entity_id: entityId,
+    }),
+  addAnnotation: (entityType: string, entityId: number, text: string) =>
+    request<Annotation>("POST", "/annotations", {
+      entity_type: entityType,
+      entity_id: entityId,
+      text,
+    }),
 };

@@ -347,3 +347,45 @@ export interface KnownRegression {
   name?: string | null;
   fix_path: FixPath | null;
 }
+
+/* ---------- health (phase 2) ---------- */
+
+export interface HealthPlanCard {
+  plan_id: number;
+  name: string;
+  latest_build: EnrichedBuild | null;
+}
+
+export interface TrendPoint {
+  build_id: number;
+  name: string;
+  commit_id?: string | null;
+  pass_rate: number;
+  created_at?: string | null;
+}
+
+export interface FlakyCandidate {
+  case_id: number;
+  external_id?: string | null;
+  name?: string | null;
+  flips: number;
+  quarantined: boolean;
+}
+
+export interface ProjectHealth {
+  project_id: number;
+  plans: HealthPlanCard[];
+  trend: TrendPoint[];
+  flaky_candidates: FlakyCandidate[];
+  open_regressions: number;
+  reinvestigations_avoidable: number;
+}
+
+export interface Annotation {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  author_id?: number | null;
+  text: string;
+  created_at: string;
+}
