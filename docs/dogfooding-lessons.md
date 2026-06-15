@@ -90,8 +90,23 @@ why it matters, and the action (with status). Append as new lessons surface.
 
 ---
 
+## Backlog status
+
+All of B1–B5 are **resolved**, plus **B6** (added during the work):
+
+- **B1 ✓** agent cold-start over REST/CLI via enrollment key (`auth.enrollment_allows`).
+- **B2 ✓** `tests/test_migrations.py` proves the chain builds the full schema from scratch
+  (kept create_all in the main suite — the full migration-based swap was judged not worth
+  the risk for marginal gain over `alembic check` + this test).
+- **B3 ✓** `_json_safe` for MCP tool returns.
+- **B4 ✓** clickable commit links via `projects.options.repo_url`.
+- **B5 ✓** both dogfood scripts record/backfill through REST (`scripts/_aqaclient`).
+- **B6 ✓** `guard_hits` table → health reports `reinvestigations_avoided` (actual) beside
+  `reinvestigations_avoidable` (point-in-time).
+
 ## Changelog
 
 - **2026-06-15** — Initial capture during the Operator Console lineage work (T0
   coverage-link, T1 lineage spine). See
   `docs/superpowers/specs/2026-06-15-operator-console-lineage-design.md`.
+- **2026-06-15** — Backlog hardening: B1–B6 resolved (see above).
