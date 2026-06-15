@@ -25,6 +25,7 @@ from app.services import (
     plans,
     projects,
     requirements,
+    reruns,
     suites,
     testcases,
     users,
@@ -649,6 +650,32 @@ async def get_known_regressions(
     means an expensive re-investigation can be skipped — the answer is cached."""
     async with _session() as s:
         return await lineage.known_regressions(s, project_id, branch, case_ids)
+
+
+@mcp.tool()
+async def request_rerun(
+    build_id: int,
+    assignee_id: int,
+    case_id: int | None = None,
+    assigner_id: int | None = None,
+    assignee_type: str = "agent",
+) -> list[dict]:
+    """Request a re-run of a case (case_id given) or the whole build (omit case_id),
+    as 'rerun' assignments the assignee discovers via list_assignments — the shared
+    human+agent work queue. Idempotent: no duplicate open rerun for a (case, build)."""
+    async with _session() as s:
+        created = await reruns.request_rerun(
+            s,
+            build_id=build_id,
+            assignee_id=assignee_id,
+            assigner_id=_provenance_id(assigner_id),
+            case_id=case_id,
+            assignee_type=assignee_type,
+        )
+        return [
+            {"id": a.id, "case_id": a.case_id, "build_id": a.build_id, "status": a.status}
+            for a in created
+        ]
 
 
 @mcp.tool()

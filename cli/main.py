@@ -159,6 +159,19 @@ def run_list(case: int = typer.Option(..., "--case")):
     _print(_request("GET", f"/api/v1/cases/{case}/executions"))
 
 
+@run_app.command("rerun")
+def run_rerun(
+    build_id: int = typer.Option(..., "--build"),
+    to: int = typer.Option(..., "--to", help="assignee (agent/user) id"),
+    case: int = typer.Option(None, "--case", help="omit to re-run the whole build"),
+):
+    """Request a re-run of a case (or whole build) — queued as a 'rerun' assignment."""
+    body = {"assignee_id": to}
+    if case is not None:
+        body["case_id"] = case
+    _print(_request("POST", f"/api/v1/builds/{build_id}/rerun", json_body=body))
+
+
 @build_app.command("timeline")
 def build_timeline(plan_id: int):
     """Builds for a plan, newest first, each with its pass/fail/blocked/not_run rollup."""

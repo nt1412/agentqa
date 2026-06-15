@@ -179,7 +179,9 @@ async def test_resolve_baseline_precise_then_fallback(session):
     assert base is not None and base.commit_id == "m1"
 
     # fallback: no base_commit → latest main build before this one = m2
-    br2 = await _record(session, c.id, plan.id, "feat-2", "fail", commit_id="f2", branch="feature/y")
+    br2 = await _record(
+        session, c.id, plan.id, "feat-2", "fail", commit_id="f2", branch="feature/y"
+    )
     base2 = await lineage.resolve_baseline(session, await session.get(Build, br2.build_id))
     assert base2 is not None and base2.commit_id == "m2"
 
@@ -264,8 +266,14 @@ async def test_branch_status_blocks_on_any_plan_regression(session):
     await _record(session, ca.id, plan_a.id, "mainA", "pass", commit_id="mA", branch="main")
     await _record(session, cb.id, plan_b.id, "mainB", "pass", commit_id="mB", branch="main")
     # branch head commit h1 in BOTH plans: A stays green, B regresses
-    await _record(session, ca.id, plan_a.id, "featA", "pass", commit_id="h1", branch="feature/x", base_commit="mA")
-    await _record(session, cb.id, plan_b.id, "featB", "fail", commit_id="h1", branch="feature/x", base_commit="mB")
+    await _record(
+        session, ca.id, plan_a.id, "featA", "pass",
+        commit_id="h1", branch="feature/x", base_commit="mA",
+    )
+    await _record(
+        session, cb.id, plan_b.id, "featB", "fail",
+        commit_id="h1", branch="feature/x", base_commit="mB",
+    )
 
     branches = await lineage.branch_status(session, p.id)
     fx = next(b for b in branches if b["branch"] == "feature/x")
@@ -294,7 +302,10 @@ async def test_known_regressions_surfaces_fix_path(session):
         reasoning={"root_cause": "off-by-one in teardown"},
     )
     # now a branch regresses the SAME case again vs baseline main@m3
-    await _record(session, c.id, plan.id, "featb", "fail", commit_id="h1", branch="feature/x", base_commit="m3")
+    await _record(
+        session, c.id, plan.id, "featb", "fail",
+        commit_id="h1", branch="feature/x", base_commit="m3",
+    )
 
     kr = await lineage.known_regressions(session, p.id, branch="feature/x")
     assert len(kr) == 1
@@ -311,5 +322,8 @@ async def test_known_regressions_empty_when_clean(session):
     c = cases[0]
     await plans.add_cases(session, plan.id, [c.id])
     await _record(session, c.id, plan.id, "m1b", "pass", commit_id="m1", branch="main")
-    await _record(session, c.id, plan.id, "featb", "pass", commit_id="h1", branch="feature/x", base_commit="m1")
+    await _record(
+        session, c.id, plan.id, "featb", "pass",
+        commit_id="h1", branch="feature/x", base_commit="m1",
+    )
     assert await lineage.known_regressions(session, p.id) == []

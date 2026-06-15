@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
         platforms,
         projects,
         requirements,
+        reruns,
         suites,
         testcases,
         users,
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(assignments.router)
     app.include_router(evidence.router)
     app.include_router(lineage.router)
+    app.include_router(reruns.router)
     app.include_router(requirements.router)
     app.include_router(users.router)
 
