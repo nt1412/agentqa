@@ -236,3 +236,42 @@ async def test_compare_no_baseline_all_new(session):
     assert diff["baseline_build_id"] is None
     assert {x["case_id"] for x in diff["classes"]["new_test"]} == {cases[0].id}
     assert diff["classes"]["regression"] == []  # no baseline → never a regression
+
+
+# ---------- branch merge-readiness (cross-plan verdict) ----------
+
+
+@pytest.mark.asyncio
+async def test_branch_status_blocks_on_any_plan_regression(session):
+    """A branch green in plan A but regressing in plan B at the same head commit
+    must read BLOCKED — not READY from picking plan A's build (the false-green)."""
+    from app.models.plan import TestPlan
+
+    p = await projects.create_project(session, ProjectCreate(name="BR", prefix="BRX"))
+    suite = await suites.create_suite(session, p.id, SuiteCreate(name="S"))
+    ca = await testcases.create_test_case(session, suite.id, TestCaseCreate(name="ca"))
+    cb = await testcases.create_test_case(session, suite.id, TestCaseCreate(name="cb"))
+    plan_a = TestPlan(project_id=p.id, name="A")
+    plan_b = TestPlan(project_id=p.id, name="B")
+    session.add_all([plan_a, plan_b])
+    await session.commit()
+    await session.refresh(plan_a)
+    await session.refresh(plan_b)
+    await plans.add_cases(session, plan_a.id, [ca.id])
+    await plans.add_cases(session, plan_b.id, [cb.id])
+
+    # baselines on main (both green)
+    await _record(session, ca.id, plan_a.id, "mainA", "pass", commit_id="mA", branch="main")
+    await _record(session, cb.id, plan_b.id, "mainB", "pass", commit_id="mB", branch="main")
+    # branch head commit h1 in BOTH plans: A stays green, B regresses
+    await _record(session, ca.id, plan_a.id, "featA", "pass", commit_id="h1", branch="feature/x", base_commit="mA")
+    await _record(session, cb.id, plan_b.id, "featB", "fail", commit_id="h1", branch="feature/x", base_commit="mB")
+
+    branches = await lineage.branch_status(session, p.id)
+    fx = next(b for b in branches if b["branch"] == "feature/x")
+    assert fx["head_commit"] == "h1"
+    assert fx["regressions"] == 1
+    assert fx["verdict"] == "BLOCKED"  # NOT READY despite plan A being green
+    by_plan = {x["plan_id"]: x for x in fx["plans"]}
+    assert by_plan[plan_b.id]["regressions"] == 1
+    assert by_plan[plan_a.id]["regressions"] == 0

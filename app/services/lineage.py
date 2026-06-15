@@ -3,10 +3,12 @@ view (see ``app/db_views.py``). Build/commit/run rollups, build detail, and
 per-case history — the data spine for the operator console.
 """
 
+import datetime as dt
+
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.plan import Build, TestPlanCase
+from app.models.plan import Build, TestPlan, TestPlanCase
 from app.models.testcase import TestCaseVersion
 from app.services.builds import get_build, list_builds
 from app.services.plans import get_plan
@@ -271,6 +273,77 @@ async def compare(session: AsyncSession, build_id: int, to: int | str = "baselin
         "baseline_build_id": baseline.id if baseline else None,
         "classes": classes,
     }
+
+
+async def branch_status(
+    session: AsyncSession, project_id: int, window_days: int = 14
+) -> list[dict]:
+    """Merge-readiness per active branch (builds in the trailing window, excluding
+    the default branch).
+
+    The verdict is taken at the grain of (branch, head-commit) and **summed across
+    every plan** that ran at that commit — BLOCKED if ANY plan regresses, else
+    READY. "Latest build per branch" would false-green a branch whose Smoke plan is
+    green while its Regression plan holds a regression; this sums all of them.
+    """
+    project = await get_project(session, project_id)
+    default_branch = (project.options or {}).get("default_branch", DEFAULT_BRANCH_FALLBACK)
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=window_days)
+    builds = (
+        await session.execute(
+            select(Build)
+            .join(TestPlan, TestPlan.id == Build.plan_id)
+            .where(
+                TestPlan.project_id == project_id,
+                Build.branch.isnot(None),
+                Build.branch != default_branch,
+                Build.created_at >= cutoff,
+            )
+        )
+    ).scalars().all()
+
+    by_branch: dict[str, list[Build]] = {}
+    for b in builds:
+        by_branch.setdefault(b.branch, []).append(b)
+
+    result: list[dict] = []
+    for branch, blds in by_branch.items():
+        head = sorted(blds, key=lambda x: (x.created_at, x.id))[-1]
+        head_commit = head.commit_id
+        at_head = [b for b in blds if b.commit_id == head_commit]
+        regressions = fixed = new_test = 0
+        plan_breakdown: list[dict] = []
+        for b in at_head:
+            diff = await compare(session, b.id, "baseline")
+            r = len(diff["classes"]["regression"])
+            f = len(diff["classes"]["fixed"])
+            n = len(diff["classes"]["new_test"])
+            regressions += r
+            fixed += f
+            new_test += n
+            plan_breakdown.append(
+                {
+                    "plan_id": b.plan_id,
+                    "build_id": b.id,
+                    "baseline_build_id": diff["baseline_build_id"],
+                    "regressions": r,
+                    "fixed": f,
+                    "new_test": n,
+                }
+            )
+        result.append(
+            {
+                "branch": branch,
+                "head_commit": head_commit,
+                "verdict": "BLOCKED" if regressions > 0 else "READY",
+                "regressions": regressions,
+                "fixed": fixed,
+                "new_test": new_test,
+                "plans": plan_breakdown,
+            }
+        )
+    result.sort(key=lambda x: x["branch"])
+    return result
 
 
 async def list_builds_enriched(session: AsyncSession, plan_id: int) -> list[dict]:

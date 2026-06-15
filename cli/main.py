@@ -21,6 +21,7 @@ case_app = typer.Typer(help="Manage test cases")
 run_app = typer.Typer(help="Record/inspect executions")
 plan_app = typer.Typer(help="Manage test plans")
 build_app = typer.Typer(help="Manage builds")
+branch_app = typer.Typer(help="Branch merge-readiness")
 milestone_app = typer.Typer(help="Manage milestones")
 assign_app = typer.Typer(help="Manage assignments")
 evidence_app = typer.Typer(help="Evidence & artifacts")
@@ -34,6 +35,7 @@ app.add_typer(case_app, name="case")
 app.add_typer(run_app, name="run")
 app.add_typer(plan_app, name="plan")
 app.add_typer(build_app, name="build")
+app.add_typer(branch_app, name="branch")
 app.add_typer(milestone_app, name="milestone")
 app.add_typer(assign_app, name="assign")
 app.add_typer(evidence_app, name="evidence")
@@ -179,6 +181,12 @@ def case_history(case_id: int):
 def build_compare(build_id: int, to: str = typer.Option("baseline", "--to")):
     """Diff a build vs another build (--to <id>) or its baseline (--to baseline)."""
     _print(_request("GET", f"/api/v1/builds/{build_id}/compare", params={"to": to}))
+
+
+@branch_app.command("status")
+def branch_status(project_id: int):
+    """Merge-readiness per active branch (verdict summed across all plans)."""
+    _print(_request("GET", f"/api/v1/projects/{project_id}/branches"))
 
 
 @plan_app.command("create")

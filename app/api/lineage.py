@@ -30,3 +30,10 @@ async def compare(build_id: int, session: SessionDep, user: CurrentUser, to: str
     auto-resolved baseline (?to=baseline): regression / fixed / still_failing /
     still_passing / new_test / removed."""
     return await lineage.compare(session, build_id, to)
+
+
+@router.get("/projects/{project_id}/branches")
+async def branch_status(project_id: int, session: SessionDep, user: CurrentUser):
+    """Merge-readiness per active branch: verdict summed across all plans at the
+    branch's head commit (BLOCKED if any plan regresses), with per-plan breakdown."""
+    return await lineage.branch_status(session, project_id)

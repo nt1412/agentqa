@@ -630,6 +630,16 @@ async def compare_builds(build_id: int, to: str = "baseline") -> dict:
 
 
 @mcp.tool()
+async def list_branch_status(project_id: int) -> list[dict]:
+    """Merge-readiness per active branch. The verdict is summed across ALL plans
+    that ran at the branch's head commit — BLOCKED if any plan regressed vs its
+    baseline, else READY — so a green plan can't mask a regressing one. Includes
+    per-plan breakdown. This is the pre-merge gate a human and agent share."""
+    async with _session() as s:
+        return await lineage.branch_status(s, project_id)
+
+
+@mcp.tool()
 async def register_agent(
     login: str,
     agent_model: str | None = None,
