@@ -21,6 +21,56 @@ import {
 type Tab = "projects" | "platforms" | "api key" | "operator";
 const TABS: Tab[] = ["projects", "platforms", "api key", "operator"];
 
+/* ---- Repo URL setter (current project) ---- */
+function RepoUrlSetter() {
+  const { currentProject, refreshProjects } = useApp();
+  const [url, setUrl] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setUrl((currentProject?.options?.repo_url as string) ?? "");
+    setSaved(false);
+  }, [currentProject]);
+
+  if (!currentProject) return null;
+
+  async function save() {
+    if (!currentProject) return;
+    const options = { ...(currentProject.options ?? {}), repo_url: url.trim() };
+    await api.updateProject(currentProject.id, { options });
+    await refreshProjects();
+    setSaved(true);
+  }
+
+  return (
+    <Panel title={`repository · ${currentProject.prefix}`}>
+      <div className="space-y-3">
+        <p className="mono text-[0.8125rem] text-[var(--color-text-dim)]">
+          Base repo URL — makes commit SHAs across the console clickable
+          (<span className="text-[var(--color-text-faint)]">{"<url>/commit/<sha>"}</span>).
+        </p>
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <Field label="repo url">
+              <Input
+                placeholder="https://github.com/owner/repo"
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  setSaved(false);
+                }}
+              />
+            </Field>
+          </div>
+          <Button onClick={save} variant="ghost">
+            {saved ? "saved ✓" : "save"}
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 /* ---- Projects tab ---- */
 function ProjectsTab() {
   const { projects, refreshProjects } = useApp();
@@ -106,6 +156,9 @@ function ProjectsTab() {
           </Button>
         </div>
       </Panel>
+
+      {/* repo URL for the selected project */}
+      <RepoUrlSetter />
     </div>
   );
 }

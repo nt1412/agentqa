@@ -88,7 +88,11 @@ export default function BuildsPage() {
               <Row key={b.id} onClick={() => router.push(`/builds/${b.id}`)}>
                 <Cell mono>{b.name}</Cell>
                 <Cell>
-                  <CommitRef sha={b.commit_id} branch={b.branch} />
+                  <CommitRef
+                    sha={b.commit_id}
+                    branch={b.branch}
+                    repoUrl={currentProject.options?.repo_url as string | undefined}
+                  />
                 </Cell>
                 <Cell>
                   <RollupBar rollup={b.rollup} />

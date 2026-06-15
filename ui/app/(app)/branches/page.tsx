@@ -20,7 +20,15 @@ function Verdict({ v }: { v: "BLOCKED" | "READY" }) {
   );
 }
 
-function BranchCard({ b, onCase }: { b: BranchStatus; onCase: (id: number) => void }) {
+function BranchCard({
+  b,
+  onCase,
+  repoUrl,
+}: {
+  b: BranchStatus;
+  onCase: (id: number) => void;
+  repoUrl?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border border-[var(--color-border)] bg-[var(--color-bg-elev)]">
@@ -31,7 +39,7 @@ function BranchCard({ b, onCase }: { b: BranchStatus; onCase: (id: number) => vo
         <div className="flex items-center gap-3">
           <span className="text-[var(--color-text-faint)]">{open ? "▾" : "▸"}</span>
           <span className="mono text-sm text-[var(--color-text)]">⑂ {b.branch}</span>
-          <CommitRef sha={b.head_commit} />
+          <CommitRef sha={b.head_commit} repoUrl={repoUrl} />
         </div>
         <div className="flex items-center gap-4">
           <span className="mono text-[0.75rem]">
@@ -118,7 +126,12 @@ export default function BranchesPage() {
         ) : (
           <div className="space-y-px">
             {branches.map((b) => (
-              <BranchCard key={b.branch} b={b} onCase={(buildId) => router.push(`/builds/${buildId}/compare`)} />
+              <BranchCard
+                key={b.branch}
+                b={b}
+                onCase={(buildId) => router.push(`/builds/${buildId}/compare`)}
+                repoUrl={currentProject.options?.repo_url as string | undefined}
+              />
             ))}
           </div>
         )}

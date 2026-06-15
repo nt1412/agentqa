@@ -103,6 +103,8 @@ export const api = {
   project: (id: number) => request<Project>("GET", `/projects/${id}`),
   createProject: (name: string, prefix: string) =>
     request<Project>("POST", "/projects", { name, prefix }),
+  updateProject: (id: number, body: { name?: string; options?: Record<string, unknown> }) =>
+    request<Project>("PUT", `/projects/${id}`, body),
   suites: (projectId: number) => request<Suite[]>("GET", `/projects/${projectId}/suites`),
   suiteTree: (suiteId: number) => request<SuiteNode[]>("GET", `/suites/${suiteId}/tree`),
   suiteCases: (suiteId: number) => request<TestCase[]>("GET", `/suites/${suiteId}/cases`),

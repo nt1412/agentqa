@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useApp } from "@/app/providers";
 import { api } from "@/lib/api";
 import type { BuildDetail } from "@/lib/types";
 import {
@@ -74,6 +75,8 @@ function RerunControl({
 export default function BuildDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { currentProject } = useApp();
+  const repoUrl = currentProject?.options?.repo_url as string | undefined;
   const buildId = Number(params.id);
   const [detail, setDetail] = useState<BuildDetail | null>(null);
   const [agents, setAgents] = useState<{ id: number; login: string }[]>([]);
@@ -99,7 +102,7 @@ export default function BuildDetailPage() {
         <div>
           <h1 className="mono text-lg font-semibold tracking-wide">{build.name}</h1>
           <div className="mt-1 flex items-center gap-3">
-            <CommitRef sha={build.commit_id} branch={build.branch} />
+            <CommitRef sha={build.commit_id} branch={build.branch} repoUrl={repoUrl} />
             {build.base_commit && (
               <span className="label !text-[var(--color-text-faint)]">
                 base {build.base_commit.slice(0, 7)}

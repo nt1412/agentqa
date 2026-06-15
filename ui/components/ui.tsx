@@ -223,17 +223,39 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
 
 /* ---------- lineage primitives ---------- */
 
-// Short commit ref — mono, bordered, with a copy-on-click affordance.
-export function CommitRef({ sha, branch }: { sha?: string | null; branch?: string | null }) {
+// Short commit ref — mono, bordered. Links to the hosted commit when a repoUrl
+// is configured (projects.options.repo_url), so a SHA is one click from the diff.
+export function CommitRef({
+  sha,
+  branch,
+  repoUrl,
+}: {
+  sha?: string | null;
+  branch?: string | null;
+  repoUrl?: string | null;
+}) {
   if (!sha) return <span className="mono text-[0.75rem] text-[var(--color-text-faint)]">no commit</span>;
+  const chipCls =
+    "mono inline-block border border-[var(--color-border-bright)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--color-text-dim)]";
+  const short = sha.slice(0, 7);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span
-        title={sha}
-        className="mono inline-block border border-[var(--color-border-bright)] px-1.5 py-0.5 text-[0.6875rem] text-[var(--color-text-dim)]"
-      >
-        {sha.slice(0, 7)}
-      </span>
+      {repoUrl ? (
+        <a
+          href={`${repoUrl.replace(/\/$/, "")}/commit/${sha}`}
+          target="_blank"
+          rel="noreferrer"
+          title={sha}
+          onClick={(e) => e.stopPropagation()}
+          className={`${chipCls} hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]`}
+        >
+          {short} ↗
+        </a>
+      ) : (
+        <span title={sha} className={chipCls}>
+          {short}
+        </span>
+      )}
       {branch && (
         <span className="mono text-[0.6875rem] text-[var(--color-text-faint)]">⑂ {branch}</span>
       )}

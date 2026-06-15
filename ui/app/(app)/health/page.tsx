@@ -116,7 +116,11 @@ export default function HealthPage() {
                     <div className="mono text-sm">{p.name}</div>
                     {p.latest_build ? (
                       <div className="mt-1">
-                        <CommitRef sha={p.latest_build.commit_id} branch={p.latest_build.branch} />
+                        <CommitRef
+                          sha={p.latest_build.commit_id}
+                          branch={p.latest_build.branch}
+                          repoUrl={currentProject.options?.repo_url as string | undefined}
+                        />
                       </div>
                     ) : (
                       <div className="label mt-1 !text-[var(--color-text-faint)]">no builds</div>
