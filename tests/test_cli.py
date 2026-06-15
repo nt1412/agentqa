@@ -125,6 +125,14 @@ def test_project_health_invokes_get(monkeypatch):
     assert calls[0][1] == "/api/v1/projects/3/health"
 
 
+def test_project_case_status_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["project", "case-status", "3"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/projects/3/case-status"
+
+
 def test_build_timeline_invokes_get(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])

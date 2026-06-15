@@ -381,3 +381,23 @@ async def test_project_health_flaky_and_metric(session):
     assert len(health["trend"]) >= 1
     assert health["open_regressions"] == 0
     assert health["reinvestigations_avoidable"] == 0
+
+
+# ---------- case-status map (suite browser inline result) ----------
+
+
+@pytest.mark.asyncio
+async def test_case_status_map_latest_and_recent(session):
+    p, _, cases, plan = await _project_with_cases(session, "NAV", n=2)
+    run, never = cases
+    await plans.add_cases(session, plan.id, [run.id, never.id])
+    # `run` goes pass → fail → pass across builds; `never` is never executed
+    await _record(session, run.id, plan.id, "b1", "pass", commit_id="c1", branch="main")
+    await _record(session, run.id, plan.id, "b2", "fail", commit_id="c2", branch="main")
+    await _record(session, run.id, plan.id, "b3", "pass", commit_id="c3", branch="main")
+
+    smap = await lineage.case_status_map(session, p.id)
+    assert smap[run.id]["latest_status"] == "pass"
+    assert smap[run.id]["recent"] == ["pass", "fail", "pass"]  # oldest→newest
+    # a never-run case is absent (UI renders it as not_run)
+    assert never.id not in smap

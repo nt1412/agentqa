@@ -461,6 +461,34 @@ async def known_regressions(
     return out
 
 
+async def case_status_map(
+    session: AsyncSession, project_id: int, recent_limit: int = 8
+) -> dict[int, dict]:
+    """For every case in the project that has run, its latest status and last-N
+    statuses (oldest→newest) — one grouped query, powering the suite browser's
+    inline 'is this green right now?' badge + sparkline. Cases that never ran are
+    absent (the UI renders them as not_run)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT r.case_id, r.status FROM latest_result_per_build_case r "
+                "JOIN builds b ON b.id = r.build_id "
+                "JOIN test_plans tp ON tp.id = b.plan_id "
+                "WHERE tp.project_id = :pid "
+                "ORDER BY r.case_id, b.created_at, b.id"
+            ),
+            {"pid": project_id},
+        )
+    ).all()
+    by_case: dict[int, list[str]] = {}
+    for case_id, status in rows:
+        by_case.setdefault(case_id, []).append(status)
+    return {
+        cid: {"latest_status": statuses[-1], "recent": statuses[-recent_limit:]}
+        for cid, statuses in by_case.items()
+    }
+
+
 async def project_health(
     session: AsyncSession, project_id: int, trend_limit: int = 20, flaky_min_flips: int = 2
 ) -> dict:

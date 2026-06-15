@@ -83,6 +83,12 @@ def project_health(project_id: int):
     _print(_request("GET", f"/api/v1/projects/{project_id}/health"))
 
 
+@project_app.command("case-status")
+def project_case_status(project_id: int):
+    """Per-case latest run-status + recent statuses (suite-browser inline result)."""
+    _print(_request("GET", f"/api/v1/projects/{project_id}/case-status"))
+
+
 @suite_app.command("create")
 def suite_create(
     project_id: int,

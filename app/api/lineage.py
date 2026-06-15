@@ -39,6 +39,13 @@ async def branch_status(project_id: int, session: SessionDep, user: CurrentUser)
     return await lineage.branch_status(session, project_id)
 
 
+@router.get("/projects/{project_id}/case-status")
+async def case_status(project_id: int, session: SessionDep, user: CurrentUser):
+    """Per-case latest run-status + recent statuses (for the suite browser's inline
+    result badge + sparkline). Cases that never ran are absent."""
+    return await lineage.case_status_map(session, project_id)
+
+
 @router.get("/projects/{project_id}/health")
 async def project_health(project_id: int, session: SessionDep, user: CurrentUser):
     """Project situational-awareness: latest build per plan, pass-rate trend, flaky

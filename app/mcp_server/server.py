@@ -642,6 +642,16 @@ async def list_branch_status(project_id: int) -> list[dict]:
 
 
 @mcp.tool()
+async def get_case_status_map(project_id: int) -> dict:
+    """Per-case latest run-status + recent statuses across the project — the
+    'is this case green right now?' map the suite browser renders inline."""
+    async with _session() as s:
+        smap = await lineage.case_status_map(s, project_id)
+        # JSON object keys must be strings
+        return {str(cid): v for cid, v in smap.items()}
+
+
+@mcp.tool()
 async def get_project_health(project_id: int) -> dict:
     """Project health: latest build per plan + rollup, pass-rate trend, flaky
     candidates (cases that flip status repeatedly), open regression count, and
