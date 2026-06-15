@@ -39,6 +39,13 @@ async def branch_status(project_id: int, session: SessionDep, user: CurrentUser)
     return await lineage.branch_status(session, project_id)
 
 
+@router.get("/projects/{project_id}/health")
+async def project_health(project_id: int, session: SessionDep, user: CurrentUser):
+    """Project situational-awareness: latest build per plan, pass-rate trend, flaky
+    candidates, open regressions, and re-investigations avoidable (cached fixes)."""
+    return await lineage.project_health(session, project_id)
+
+
 @router.get("/projects/{project_id}/known-regressions")
 async def known_regressions(
     project_id: int, session: SessionDep, user: CurrentUser, branch: str | None = None

@@ -117,6 +117,14 @@ def test_req_link_coverage_invokes_post(monkeypatch):
     assert calls[0][2]["json_body"]["case_ids"] == [9, 10]
 
 
+def test_project_health_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["project", "health", "3"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/projects/3/health"
+
+
 def test_build_timeline_invokes_get(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])

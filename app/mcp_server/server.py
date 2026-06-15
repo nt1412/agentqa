@@ -641,6 +641,15 @@ async def list_branch_status(project_id: int) -> list[dict]:
 
 
 @mcp.tool()
+async def get_project_health(project_id: int) -> dict:
+    """Project health: latest build per plan + rollup, pass-rate trend, flaky
+    candidates (cases that flip status repeatedly), open regression count, and
+    re-investigations avoidable (open regressions with a cached fix-path)."""
+    async with _session() as s:
+        return await lineage.project_health(s, project_id)
+
+
+@mcp.tool()
 async def get_known_regressions(
     project_id: int, branch: str | None = None, case_ids: list[int] | None = None
 ) -> list[dict]:

@@ -353,3 +353,31 @@ async def test_quarantine_excludes_case_from_verdict_and_guard(session):
     bs = await lineage.branch_status(session, p.id)
     assert bs[0]["regressions"] == 0 and bs[0]["verdict"] == "READY"
     assert await lineage.known_regressions(session, p.id) == []
+
+
+# ---------- project health + flaky + metric ----------
+
+
+@pytest.mark.asyncio
+async def test_project_health_flaky_and_metric(session):
+    p, _, cases, plan = await _project_with_cases(session, "HLTH", n=2)
+    flaky, stable = cases
+    await plans.add_cases(session, plan.id, [flaky.id, stable.id])
+    # flaky flips pass→fail→pass across builds; stable stays pass
+    await _record(session, flaky.id, plan.id, "b1", "pass", commit_id="c1", branch="main")
+    await _record(session, stable.id, plan.id, "b1", "pass", commit_id="c1", branch="main")
+    await _record(session, flaky.id, plan.id, "b2", "fail", commit_id="c2", branch="main")
+    await _record(session, flaky.id, plan.id, "b3", "pass", commit_id="c3", branch="main")
+
+    health = await lineage.project_health(session, p.id)
+    # per-plan latest build present, with rollup
+    assert health["plans"][0]["latest_build"] is not None
+    assert "pass_rate" in health["plans"][0]["latest_build"]["rollup"]
+    # flaky candidate detected (2 transitions), stable case not
+    flaky_ids = {f["case_id"] for f in health["flaky_candidates"]}
+    assert flaky.id in flaky_ids
+    assert stable.id not in flaky_ids
+    # trend + metric keys present
+    assert len(health["trend"]) >= 1
+    assert health["open_regressions"] == 0
+    assert health["reinvestigations_avoidable"] == 0

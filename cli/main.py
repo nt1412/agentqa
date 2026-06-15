@@ -75,6 +75,12 @@ def project_get(project_id: int):
     _print(_request("GET", f"/api/v1/projects/{project_id}"))
 
 
+@project_app.command("health")
+def project_health(project_id: int):
+    """Health: per-plan latest build, trend, flaky candidates, regressions, cached fixes."""
+    _print(_request("GET", f"/api/v1/projects/{project_id}/health"))
+
+
 @suite_app.command("create")
 def suite_create(
     project_id: int,

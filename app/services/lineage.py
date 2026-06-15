@@ -461,6 +461,90 @@ async def known_regressions(
     return out
 
 
+async def project_health(
+    session: AsyncSession, project_id: int, trend_limit: int = 20, flaky_min_flips: int = 2
+) -> dict:
+    """Operator situational-awareness for a project: latest build per plan, a
+    pass-rate trend, flaky candidates (cases that flip status repeatedly), open
+    regression count, and 're-investigations avoidable' = open regressions that
+    already have a known fix-path (the answer is cached — that's tokens saved).
+    """
+    from app.services.plans import list_plans
+
+    plans = await list_plans(session, project_id)
+    plan_cards: list[dict] = []
+    all_builds: list[dict] = []
+    for plan in plans:
+        builds = await list_builds_enriched(session, plan.id)  # newest first
+        plan_cards.append(
+            {"plan_id": plan.id, "name": plan.name, "latest_build": builds[0] if builds else None}
+        )
+        all_builds.extend(builds)
+
+    # trend: most recent builds across the project, oldest→newest, just pass_rate
+    all_builds.sort(key=lambda b: (b["created_at"] or "", b["id"]))
+    trend = [
+        {
+            "build_id": b["id"],
+            "name": b["name"],
+            "commit_id": b["commit_id"],
+            "pass_rate": b["rollup"]["pass_rate"],
+            "created_at": b["created_at"],
+        }
+        for b in all_builds[-trend_limit:]
+    ]
+
+    # flaky candidates: one query of latest-per-build-case across the project,
+    # grouped by case, counting pass↔fail/blocked transitions.
+    rows = (
+        await session.execute(
+            text(
+                "SELECT r.case_id, r.status FROM latest_result_per_build_case r "
+                "JOIN builds b ON b.id = r.build_id "
+                "JOIN test_plans tp ON tp.id = b.plan_id "
+                "WHERE tp.project_id = :pid "
+                "ORDER BY r.case_id, b.created_at, b.id"
+            ),
+            {"pid": project_id},
+        )
+    ).all()
+    flips: dict[int, int] = {}
+    prev_status: dict[int, str] = {}
+    for case_id, status in rows:
+        prev = prev_status.get(case_id)
+        norm = "pass" if status == "pass" else "nonpass"
+        if prev is not None and prev != norm:
+            flips[case_id] = flips.get(case_id, 0) + 1
+        prev_status[case_id] = norm
+    flaky_ids = {cid for cid, n in flips.items() if n >= flaky_min_flips}
+    meta = await _case_meta(session, flaky_ids)
+    quarantined = await _quarantined_ids(session, project_id)
+    flaky_candidates = sorted(
+        (
+            {
+                "case_id": cid,
+                "external_id": meta.get(cid, (None, None))[0],
+                "name": meta.get(cid, (None, None))[1],
+                "flips": flips[cid],
+                "quarantined": cid in quarantined,
+            }
+            for cid in flaky_ids
+        ),
+        key=lambda f: (-f["flips"], f["external_id"] or ""),
+    )
+
+    regressions = await known_regressions(session, project_id)
+    avoidable = sum(1 for r in regressions if r["fix_path"] is not None)
+    return {
+        "project_id": project_id,
+        "plans": plan_cards,
+        "trend": trend,
+        "flaky_candidates": flaky_candidates,
+        "open_regressions": len(regressions),
+        "reinvestigations_avoidable": avoidable,
+    }
+
+
 async def list_builds_enriched(session: AsyncSession, plan_id: int) -> list[dict]:
     """Builds for a plan, newest first, each with its rollup — the build timeline."""
     builds = await list_builds(session, plan_id)
