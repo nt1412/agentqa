@@ -157,3 +157,39 @@ async def test_rest_build_timeline_detail_history(session, client, auth_headers)
     r = await client.get(f"/api/v1/cases/{cases[0].id}/history", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["executions"][0]["commit_id"] == "sha1"
+
+
+# ---------- baseline resolution ----------
+
+
+@pytest.mark.asyncio
+async def test_resolve_baseline_precise_then_fallback(session):
+    _, _, cases, plan = await _project_with_cases(session, "BASE", n=1)
+    c = cases[0]
+    await plans.add_cases(session, plan.id, [c.id])
+    await _record(session, c.id, plan.id, "main-1", "pass", commit_id="m1", branch="main")
+    await _record(session, c.id, plan.id, "main-2", "pass", commit_id="m2", branch="main")
+
+    # precise: base_commit pins the baseline to m1 even though m2 is newer
+    br = await _record(
+        session, c.id, plan.id, "feat-1", "fail",
+        commit_id="f1", branch="feature/x", base_commit="m1",
+    )
+    base = await lineage.resolve_baseline(session, await session.get(Build, br.build_id))
+    assert base is not None and base.commit_id == "m1"
+
+    # fallback: no base_commit → latest main build before this one = m2
+    br2 = await _record(session, c.id, plan.id, "feat-2", "fail", commit_id="f2", branch="feature/y")
+    base2 = await lineage.resolve_baseline(session, await session.get(Build, br2.build_id))
+    assert base2 is not None and base2.commit_id == "m2"
+
+
+@pytest.mark.asyncio
+async def test_resolve_baseline_none_when_no_default_branch_builds(session):
+    _, _, cases, plan = await _project_with_cases(session, "BASE0", n=1)
+    c = cases[0]
+    await plans.add_cases(session, plan.id, [c.id])
+    # only a branch build exists; no main builds to compare against
+    br = await _record(session, c.id, plan.id, "feat-1", "fail", commit_id="f1", branch="feature/x")
+    base = await lineage.resolve_baseline(session, await session.get(Build, br.build_id))
+    assert base is None

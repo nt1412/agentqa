@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.plan import Build, TestPlanCase
 from app.models.testcase import TestCaseVersion
 from app.services.builds import get_build, list_builds
+from app.services.plans import get_plan
+from app.services.projects import get_project
+
+DEFAULT_BRANCH_FALLBACK = "main"
 
 
 def _build_dump(build: Build) -> dict:
@@ -153,6 +157,44 @@ async def case_history(session: AsyncSession, case_id: int) -> dict:
                 )
         prev = e
     return {"case_id": case_id, "executions": executions, "transitions": transitions}
+
+
+async def default_branch_for_plan(session: AsyncSession, plan_id: int) -> str:
+    plan = await get_plan(session, plan_id)
+    project = await get_project(session, plan.project_id)
+    return (project.options or {}).get("default_branch", DEFAULT_BRANCH_FALLBACK)
+
+
+async def resolve_baseline(session: AsyncSession, build: Build) -> Build | None:
+    """The default-branch build (in the same plan) this branch build is judged
+    against. Precise when base_commit matches a default-branch build; otherwise
+    the latest default-branch build at or before this build's created_at. None
+    when there is no default-branch build to compare against (→ "all new").
+    """
+    default_branch = await default_branch_for_plan(session, build.plan_id)
+    candidates = (
+        await session.execute(
+            select(Build).where(
+                Build.plan_id == build.plan_id,
+                Build.branch == default_branch,
+                Build.id != build.id,
+            )
+        )
+    ).scalars().all()
+    if not candidates:
+        return None
+    # precise: pin to the recorded merge-base if that build exists
+    if build.base_commit:
+        for c in candidates:
+            if c.commit_id == build.base_commit:
+                return c
+    # fallback: latest default-branch build at/before this build's time
+    eligible = [
+        c for c in candidates
+        if c.created_at and build.created_at and c.created_at <= build.created_at
+    ] or candidates
+    eligible.sort(key=lambda c: (c.created_at, c.id))
+    return eligible[-1]
 
 
 async def list_builds_enriched(session: AsyncSession, plan_id: int) -> list[dict]:
