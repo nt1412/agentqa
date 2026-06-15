@@ -327,3 +327,29 @@ async def test_known_regressions_empty_when_clean(session):
         commit_id="h1", branch="feature/x", base_commit="m1",
     )
     assert await lineage.known_regressions(session, p.id) == []
+
+
+# ---------- quarantine ----------
+
+
+@pytest.mark.asyncio
+async def test_quarantine_excludes_case_from_verdict_and_guard(session):
+    p, _, cases, plan = await _project_with_cases(session, "QUAR", n=1)
+    c = cases[0]
+    await plans.add_cases(session, plan.id, [c.id])
+    await _record(session, c.id, plan.id, "main-1", "pass", commit_id="m1", branch="main")
+    await _record(
+        session, c.id, plan.id, "feat-1", "fail",
+        commit_id="h1", branch="feature/x", base_commit="m1",
+    )
+
+    # before quarantine: branch is BLOCKED and the regression shows in the guard
+    bs = await lineage.branch_status(session, p.id)
+    assert bs[0]["verdict"] == "BLOCKED" and bs[0]["regressions"] == 1
+    assert len(await lineage.known_regressions(session, p.id)) == 1
+
+    # quarantine the case → no longer counts toward the verdict or the guard
+    await testcases.set_quarantine(session, c.id, True)
+    bs = await lineage.branch_status(session, p.id)
+    assert bs[0]["regressions"] == 0 and bs[0]["verdict"] == "READY"
+    assert await lineage.known_regressions(session, p.id) == []

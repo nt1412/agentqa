@@ -167,6 +167,16 @@ def test_branch_known_regressions_invokes_get(monkeypatch):
     assert calls[0][2]["params"]["branch"] == "feature/x"
 
 
+def test_case_quarantine_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {})
+    result = runner.invoke(cli.app, ["case", "quarantine", "5"])
+    assert result.exit_code == 0
+    assert calls[0][0] == "POST"
+    assert calls[0][1] == "/api/v1/cases/5/quarantine"
+    assert calls[0][2]["params"]["quarantined"] is True
+
+
 def test_run_rerun_invokes_post(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])

@@ -653,6 +653,17 @@ async def get_known_regressions(
 
 
 @mcp.tool()
+async def set_quarantine(case_id: int, quarantined: bool = True) -> dict:
+    """Quarantine (or un-quarantine) a known-flaky case. Quarantined cases still
+    run and record, but are excluded from the merge-readiness verdict and the
+    known-regression guard, so flaky noise can't block a merge or bury real
+    regressions."""
+    async with _session() as s:
+        tc = await testcases.set_quarantine(s, case_id, quarantined)
+        return {"id": tc.id, "external_id": tc.external_id, "quarantined": tc.quarantined}
+
+
+@mcp.tool()
 async def request_rerun(
     build_id: int,
     assignee_id: int,

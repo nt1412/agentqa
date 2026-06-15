@@ -184,6 +184,21 @@ def build_detail(build_id: int):
     _print(_request("GET", f"/api/v1/builds/{build_id}"))
 
 
+@case_app.command("quarantine")
+def case_quarantine(
+    case_id: int,
+    off: bool = typer.Option(False, "--off", help="un-quarantine instead"),
+):
+    """Quarantine a flaky case (exclude from merge verdict + guard). --off reverses."""
+    _print(
+        _request(
+            "POST",
+            f"/api/v1/cases/{case_id}/quarantine",
+            params={"quarantined": not off},
+        )
+    )
+
+
 @case_app.command("history")
 def case_history(case_id: int):
     """A case's latest result per build, chronological, with broke/fixed transitions."""

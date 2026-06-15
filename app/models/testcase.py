@@ -12,6 +12,10 @@ class TestCase(Base, TimestampMixin):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
     external_id: Mapped[str] = mapped_column(String(64), index=True)  # e.g. "PROJ-42"
     name: Mapped[str] = mapped_column(String(256))
+    # quarantined cases are excluded from the merge-readiness verdict and the
+    # known-regression guard, so a known-flaky case can't block a merge or drown
+    # real regressions in noise. It still runs and records normally.
+    quarantined: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     versions: Mapped[list["TestCaseVersion"]] = relationship(
         back_populates="case", order_by="TestCaseVersion.version"

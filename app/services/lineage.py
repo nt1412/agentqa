@@ -9,7 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.plan import Build, TestPlan, TestPlanCase
-from app.models.testcase import TestCaseVersion
+from app.models.testcase import TestCase, TestCaseVersion
 from app.services.builds import get_build, list_builds
 from app.services.plans import get_plan
 from app.services.projects import get_project
@@ -275,6 +275,17 @@ async def compare(session: AsyncSession, build_id: int, to: int | str = "baselin
     }
 
 
+async def _quarantined_ids(session: AsyncSession, project_id: int) -> set[int]:
+    rows = (
+        await session.execute(
+            select(TestCase.id).where(
+                TestCase.project_id == project_id, TestCase.quarantined.is_(True)
+            )
+        )
+    ).scalars().all()
+    return set(rows)
+
+
 async def branch_status(
     session: AsyncSession, project_id: int, window_days: int = 14
 ) -> list[dict]:
@@ -288,6 +299,7 @@ async def branch_status(
     """
     project = await get_project(session, project_id)
     default_branch = (project.options or {}).get("default_branch", DEFAULT_BRANCH_FALLBACK)
+    quarantined = await _quarantined_ids(session, project_id)
     cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=window_days)
     builds = (
         await session.execute(
@@ -315,7 +327,8 @@ async def branch_status(
         plan_breakdown: list[dict] = []
         for b in at_head:
             diff = await compare(session, b.id, "baseline")
-            r = len(diff["classes"]["regression"])
+            # quarantined cases never count toward the verdict (known-flaky noise)
+            r = len([e for e in diff["classes"]["regression"] if e["case_id"] not in quarantined])
             f = len(diff["classes"]["fixed"])
             n = len(diff["classes"]["new_test"])
             regressions += r
@@ -421,6 +434,7 @@ async def known_regressions(
     for b in blds:
         by_branch.setdefault(b.branch, []).append(b)
 
+    quarantined = await _quarantined_ids(session, project_id)
     case_filter = set(case_ids) if case_ids else None
     out: list[dict] = []
     for br, lst in by_branch.items():
@@ -428,6 +442,8 @@ async def known_regressions(
         for b in [x for x in lst if x.commit_id == head_commit]:
             diff = await compare(session, b.id, "baseline")
             for entry in diff["classes"]["regression"]:
+                if entry["case_id"] in quarantined:
+                    continue  # known-flaky — don't surface as something to investigate
                 if case_filter and entry["case_id"] not in case_filter:
                     continue
                 out.append(

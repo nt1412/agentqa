@@ -250,3 +250,15 @@ async def search_test_cases(session: AsyncSession, project_id: int, query: str) 
         .order_by(TestCase.id)
     )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def set_quarantine(session: AsyncSession, case_id: int, quarantined: bool) -> TestCase:
+    """Flag/unflag a case as quarantined (excluded from merge-readiness verdict
+    and the known-regression guard). The case still runs and records normally."""
+    tc = await session.get(TestCase, case_id)
+    if tc is None:
+        raise NotFound(f"test case {case_id} not found")
+    tc.quarantined = quarantined
+    await session.commit()
+    await session.refresh(tc)
+    return tc

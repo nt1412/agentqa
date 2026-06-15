@@ -27,6 +27,16 @@ async def list_in_suite(suite_id: int, session: SessionDep, user: CurrentUser):
     return await testcases.list_cases_in_suite(session, suite_id)
 
 
+@router.post("/cases/{case_id}/quarantine")
+async def quarantine(
+    case_id: int, session: SessionDep, user: CurrentUser, quarantined: bool = True
+):
+    """Quarantine (or, with ?quarantined=false, un-quarantine) a flaky case so it's
+    excluded from the merge-readiness verdict and the known-regression guard."""
+    tc = await testcases.set_quarantine(session, case_id, quarantined)
+    return {"id": tc.id, "external_id": tc.external_id, "quarantined": tc.quarantined}
+
+
 @router.get("/cases/{case_id}", response_model=TestCaseOut)
 async def get_one(case_id: int, session: SessionDep, user: CurrentUser):
     return await testcases.get_test_case(session, case_id)
