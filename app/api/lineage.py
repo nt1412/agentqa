@@ -37,3 +37,13 @@ async def branch_status(project_id: int, session: SessionDep, user: CurrentUser)
     """Merge-readiness per active branch: verdict summed across all plans at the
     branch's head commit (BLOCKED if any plan regresses), with per-plan breakdown."""
     return await lineage.branch_status(session, project_id)
+
+
+@router.get("/projects/{project_id}/known-regressions")
+async def known_regressions(
+    project_id: int, session: SessionDep, user: CurrentUser, branch: str | None = None
+):
+    """Open regressions on active branches, each annotated with its known fix-path
+    (broke@→fixed@ + prior reasoning) when one exists — the pre-flight that saves
+    re-investigating an already-diagnosed failure."""
+    return await lineage.known_regressions(session, project_id, branch)

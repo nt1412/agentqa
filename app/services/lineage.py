@@ -346,6 +346,105 @@ async def branch_status(
     return result
 
 
+async def known_fix_path(session: AsyncSession, case_id: int) -> dict | None:
+    """If this case broke and was fixed before, return that completed path:
+    {broke_commit, fixed_commit, fixing_execution_id, reasoning}. None if novel.
+
+    This is the cached expensive answer — an agent reads it instead of
+    re-investigating a failure that's been diagnosed and fixed once already.
+    """
+    hist = await case_history(session, case_id)
+    pairs: list[tuple] = []
+    last_broke = None
+    for t in hist["transitions"]:
+        if t["type"] == "broke":
+            last_broke = t
+        elif t["type"] == "fixed" and last_broke is not None:
+            pairs.append((last_broke, t))
+            last_broke = None
+    if not pairs:
+        return None
+    broke_t, fixed_t = pairs[-1]  # most recent completed broke→fixed
+    exec_id = next(
+        (e["execution_id"] for e in hist["executions"] if e["build_id"] == fixed_t["build_id"]),
+        None,
+    )
+    reasoning = None
+    if exec_id is not None:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT reasoning FROM execution_reasoning "
+                    "WHERE execution_id = :e ORDER BY id DESC LIMIT 1"
+                ),
+                {"e": exec_id},
+            )
+        ).first()
+        if row:
+            reasoning = row[0]
+    return {
+        "broke_commit": broke_t["commit_id"],
+        "fixed_commit": fixed_t["commit_id"],
+        "fixing_execution_id": exec_id,
+        "reasoning": reasoning,
+    }
+
+
+async def known_regressions(
+    session: AsyncSession,
+    project_id: int,
+    branch: str | None = None,
+    case_ids: list[int] | None = None,
+    window_days: int = 14,
+) -> list[dict]:
+    """Open regressions on active branches, each annotated with its known fix-path
+    (broke@→fixed@ + prior reasoning) when one exists. The pre-flight an agent
+    calls before investigating — empty when nothing is regressing."""
+    project = await get_project(session, project_id)
+    default_branch = (project.options or {}).get("default_branch", DEFAULT_BRANCH_FALLBACK)
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=window_days)
+    q = (
+        select(Build)
+        .join(TestPlan, TestPlan.id == Build.plan_id)
+        .where(
+            TestPlan.project_id == project_id,
+            Build.branch.isnot(None),
+            Build.branch != default_branch,
+            Build.created_at >= cutoff,
+        )
+    )
+    if branch:
+        q = q.where(Build.branch == branch)
+    blds = (await session.execute(q)).scalars().all()
+
+    by_branch: dict[str, list[Build]] = {}
+    for b in blds:
+        by_branch.setdefault(b.branch, []).append(b)
+
+    case_filter = set(case_ids) if case_ids else None
+    out: list[dict] = []
+    for br, lst in by_branch.items():
+        head_commit = sorted(lst, key=lambda x: (x.created_at, x.id))[-1].commit_id
+        for b in [x for x in lst if x.commit_id == head_commit]:
+            diff = await compare(session, b.id, "baseline")
+            for entry in diff["classes"]["regression"]:
+                if case_filter and entry["case_id"] not in case_filter:
+                    continue
+                out.append(
+                    {
+                        "branch": br,
+                        "plan_id": b.plan_id,
+                        "build_id": b.id,
+                        "case_id": entry["case_id"],
+                        "external_id": entry["external_id"],
+                        "name": entry["name"],
+                        "fix_path": await known_fix_path(session, entry["case_id"]),
+                    }
+                )
+    out.sort(key=lambda x: (x["branch"], x["external_id"] or ""))
+    return out
+
+
 async def list_builds_enriched(session: AsyncSession, plan_id: int) -> list[dict]:
     """Builds for a plan, newest first, each with its rollup — the build timeline."""
     builds = await list_builds(session, plan_id)

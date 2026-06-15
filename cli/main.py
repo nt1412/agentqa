@@ -189,6 +189,13 @@ def branch_status(project_id: int):
     _print(_request("GET", f"/api/v1/projects/{project_id}/branches"))
 
 
+@branch_app.command("known-regressions")
+def branch_known_regressions(project_id: int, branch: str = typer.Option(None, "--branch")):
+    """Open regressions + known fix-paths (call before investigating a failure)."""
+    params = {"branch": branch} if branch else None
+    _print(_request("GET", f"/api/v1/projects/{project_id}/known-regressions", params=params))
+
+
 @plan_app.command("create")
 def plan_create(project_id: int, name: str = typer.Option(..., "--name")):
     _print(_request("POST", f"/api/v1/projects/{project_id}/plans", json_body={"name": name}))

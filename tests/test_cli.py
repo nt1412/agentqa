@@ -158,6 +158,15 @@ def test_branch_status_invokes_get(monkeypatch):
     assert calls[0][1] == "/api/v1/projects/3/branches"
 
 
+def test_branch_known_regressions_invokes_get(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [])
+    result = runner.invoke(cli.app, ["branch", "known-regressions", "3", "--branch", "feature/x"])
+    assert result.exit_code == 0
+    assert calls[0][1] == "/api/v1/projects/3/known-regressions"
+    assert calls[0][2]["params"]["branch"] == "feature/x"
+
+
 def test_run_record_passes_branch_and_base_commit(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or {"id": 1})

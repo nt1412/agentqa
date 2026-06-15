@@ -640,6 +640,18 @@ async def list_branch_status(project_id: int) -> list[dict]:
 
 
 @mcp.tool()
+async def get_known_regressions(
+    project_id: int, branch: str | None = None, case_ids: list[int] | None = None
+) -> list[dict]:
+    """Call this BEFORE investigating a failure. Returns open regressions on active
+    branches, each annotated with its known fix-path (the commit that broke it, the
+    commit that fixed it last time, and the prior reasoning) when one exists. A hit
+    means an expensive re-investigation can be skipped — the answer is cached."""
+    async with _session() as s:
+        return await lineage.known_regressions(s, project_id, branch, case_ids)
+
+
+@mcp.tool()
 async def register_agent(
     login: str,
     agent_model: str | None = None,

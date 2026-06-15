@@ -275,3 +275,41 @@ async def test_branch_status_blocks_on_any_plan_regression(session):
     by_plan = {x["plan_id"]: x for x in fx["plans"]}
     assert by_plan[plan_b.id]["regressions"] == 1
     assert by_plan[plan_a.id]["regressions"] == 0
+
+
+# ---------- known-regression guard (token-saver) ----------
+
+
+@pytest.mark.asyncio
+async def test_known_regressions_surfaces_fix_path(session):
+    p, _, cases, plan = await _project_with_cases(session, "GRD", n=1)
+    c = cases[0]
+    await plans.add_cases(session, plan.id, [c.id])
+    # history on main: pass(m1) → fail(m2) → pass(m3) — a completed broke@m2 / fixed@m3,
+    # with the fixing reasoning recorded at m3.
+    await _record(session, c.id, plan.id, "m1b", "pass", commit_id="m1", branch="main")
+    await _record(session, c.id, plan.id, "m2b", "fail", commit_id="m2", branch="main")
+    await _record(
+        session, c.id, plan.id, "m3b", "pass", commit_id="m3", branch="main",
+        reasoning={"root_cause": "off-by-one in teardown"},
+    )
+    # now a branch regresses the SAME case again vs baseline main@m3
+    await _record(session, c.id, plan.id, "featb", "fail", commit_id="h1", branch="feature/x", base_commit="m3")
+
+    kr = await lineage.known_regressions(session, p.id, branch="feature/x")
+    assert len(kr) == 1
+    fp = kr[0]["fix_path"]
+    assert fp is not None
+    assert fp["broke_commit"] == "m2"
+    assert fp["fixed_commit"] == "m3"
+    assert fp["reasoning"]["root_cause"] == "off-by-one in teardown"
+
+
+@pytest.mark.asyncio
+async def test_known_regressions_empty_when_clean(session):
+    p, _, cases, plan = await _project_with_cases(session, "GRD0", n=1)
+    c = cases[0]
+    await plans.add_cases(session, plan.id, [c.id])
+    await _record(session, c.id, plan.id, "m1b", "pass", commit_id="m1", branch="main")
+    await _record(session, c.id, plan.id, "featb", "pass", commit_id="h1", branch="feature/x", base_commit="m1")
+    assert await lineage.known_regressions(session, p.id) == []
