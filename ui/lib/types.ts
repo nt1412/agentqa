@@ -379,6 +379,7 @@ export interface ProjectHealth {
   flaky_candidates: FlakyCandidate[];
   open_regressions: number;
   reinvestigations_avoidable: number;
+  reinvestigations_avoided: number;
 }
 
 export interface Annotation {

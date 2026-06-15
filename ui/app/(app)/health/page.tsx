@@ -77,16 +77,21 @@ export default function HealthPage() {
         <p className="label mt-0.5">{currentProject.prefix} · situational overview</p>
       </div>
 
-      <Grid cols={4}>
+      <Grid cols={5}>
         <Stat
           label="open regressions"
           value={health.open_regressions}
           color={health.open_regressions ? "var(--color-fail)" : "var(--color-pass)"}
         />
         <Stat
-          label="re-investigations avoidable"
-          value={health.reinvestigations_avoidable}
+          label="re-investigations avoided"
+          value={health.reinvestigations_avoided}
           color="var(--color-accent)"
+          hint="cached fixes served to agents (cumulative)"
+        />
+        <Stat
+          label="avoidable now"
+          value={health.reinvestigations_avoidable}
           hint="open regressions with a cached fix"
         />
         <Stat label="flaky candidates" value={health.flaky_candidates.length} color="var(--color-blocked)" />
