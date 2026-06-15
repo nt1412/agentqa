@@ -18,6 +18,7 @@ from app.db import SessionLocal
 from app.schemas.execution import ExecutionCreate, StepResultIn
 from app.schemas.testcase import StepIn, TestCaseCreate
 from app.services import (
+    annotations,
     assignments,
     evidence,
     executions,
@@ -659,6 +660,30 @@ async def get_known_regressions(
     means an expensive re-investigation can be skipped — the answer is cached."""
     async with _session() as s:
         return await lineage.known_regressions(s, project_id, branch, case_ids)
+
+
+@mcp.tool()
+async def create_annotation(
+    entity_type: str, entity_id: int, text: str, author_id: int | None = None
+) -> dict:
+    """Attach a note to an entity (entity_type e.g. 'regression'|'case'|'build',
+    entity_id its id) — the human+agent collaboration trail. Author defaults to
+    the authenticated identity."""
+    async with _session() as s:
+        a = await annotations.create_annotation(
+            s, entity_type, entity_id, text, _provenance_id(author_id)
+        )
+        return {"id": a.id, "entity_type": a.entity_type, "entity_id": a.entity_id}
+
+
+@mcp.tool()
+async def list_annotations(entity_type: str, entity_id: int) -> list[dict]:
+    """Notes attached to an entity, oldest first."""
+    async with _session() as s:
+        rows = await annotations.list_annotations(s, entity_type, entity_id)
+        return [
+            {"id": a.id, "author_id": a.author_id, "text": a.text} for a in rows
+        ]
 
 
 @mcp.tool()

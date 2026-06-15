@@ -26,6 +26,18 @@ class CustomFieldValue(Base):
     value: Mapped[str | None] = mapped_column(Text)
 
 
+class Annotation(Base, TimestampMixin):
+    """A free-text note a human or agent attaches to any entity (a regression, a
+    case, a build) — the collaboration trail. Polymorphic like the other junctions."""
+
+    __tablename__ = "annotations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(32), index=True)
+    entity_id: Mapped[int] = mapped_column(Integer, index=True)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    text: Mapped[str] = mapped_column(Text)
+
+
 class Attachment(Base, TimestampMixin):
     __tablename__ = "attachments"
     id: Mapped[int] = mapped_column(primary_key=True)

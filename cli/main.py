@@ -22,6 +22,7 @@ run_app = typer.Typer(help="Record/inspect executions")
 plan_app = typer.Typer(help="Manage test plans")
 build_app = typer.Typer(help="Manage builds")
 branch_app = typer.Typer(help="Branch merge-readiness")
+annotate_app = typer.Typer(help="Annotations on entities")
 milestone_app = typer.Typer(help="Manage milestones")
 assign_app = typer.Typer(help="Manage assignments")
 evidence_app = typer.Typer(help="Evidence & artifacts")
@@ -36,6 +37,7 @@ app.add_typer(run_app, name="run")
 app.add_typer(plan_app, name="plan")
 app.add_typer(build_app, name="build")
 app.add_typer(branch_app, name="branch")
+app.add_typer(annotate_app, name="annotate")
 app.add_typer(milestone_app, name="milestone")
 app.add_typer(assign_app, name="assign")
 app.add_typer(evidence_app, name="evidence")
@@ -215,6 +217,32 @@ def case_history(case_id: int):
 def build_compare(build_id: int, to: str = typer.Option("baseline", "--to")):
     """Diff a build vs another build (--to <id>) or its baseline (--to baseline)."""
     _print(_request("GET", f"/api/v1/builds/{build_id}/compare", params={"to": to}))
+
+
+@annotate_app.command("add")
+def annotate_add(
+    entity_type: str, entity_id: int, text: str = typer.Option(..., "--text")
+):
+    """Attach a note to an entity (e.g. regression/case/build)."""
+    _print(
+        _request(
+            "POST",
+            "/api/v1/annotations",
+            json_body={"entity_type": entity_type, "entity_id": entity_id, "text": text},
+        )
+    )
+
+
+@annotate_app.command("list")
+def annotate_list(entity_type: str, entity_id: int):
+    """List notes on an entity."""
+    _print(
+        _request(
+            "GET",
+            "/api/v1/annotations",
+            params={"entity_type": entity_type, "entity_id": entity_id},
+        )
+    )
 
 
 @branch_app.command("status")

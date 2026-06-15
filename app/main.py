@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=status, content={"detail": str(exc)})
 
     from app.api import (
+        annotations,
         assignments,
         auth,
         evidence,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
         users,
     )
 
+    app.include_router(annotations.router)
     app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(suites.router)
