@@ -107,6 +107,16 @@ def test_req_gaps_invokes_get(monkeypatch):
     assert calls[0][1] == "/api/v1/projects/3/coverage-gaps"
 
 
+def test_req_link_coverage_invokes_post(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_request", lambda m, p, **k: calls.append((m, p, k)) or [{"id": 1}])
+    result = runner.invoke(cli.app, ["req", "link-coverage", "42", "--case", "9", "--case", "10"])
+    assert result.exit_code == 0
+    assert calls[0][0] == "POST"
+    assert calls[0][1] == "/api/v1/requirements/42/coverage"
+    assert calls[0][2]["json_body"]["case_ids"] == [9, 10]
+
+
 def test_agent_register_invokes_post(monkeypatch):
     calls = []
     monkeypatch.setattr(

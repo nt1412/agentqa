@@ -563,6 +563,19 @@ async def create_requirement(
 
 
 @mcp.tool()
+async def link_coverage(req_id: int, case_ids: list[int]) -> dict:
+    """Link a requirement to test cases as coverage, after the requirement exists.
+
+    Use this to attach tests to a requirement you registered earlier (the
+    register-now, cover-as-tests-land loop). Idempotent — re-linking a case is a
+    no-op. Closes the requirement's entry in get_coverage_gaps.
+    """
+    async with _session() as s:
+        links = await requirements.link_requirement_coverage(s, req_id, case_ids)
+        return {"req_id": req_id, "linked_case_ids": case_ids, "coverage_count": len(links)}
+
+
+@mcp.tool()
 async def get_coverage_gaps(project_id: int, spec_id: int | None = None) -> list[dict]:
     """Requirements with no active test coverage — gap analysis."""
     async with _session() as s:

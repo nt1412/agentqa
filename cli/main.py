@@ -299,6 +299,21 @@ def req_create(
     )
 
 
+@req_app.command("link-coverage")
+def req_link_coverage(
+    req_id: int,
+    case: list[int] = typer.Option(..., "--case", help="case id (repeatable)"),  # noqa: B008
+):
+    """Link a requirement to test cases as coverage (after the requirement exists)."""
+    _print(
+        _request(
+            "POST",
+            f"/api/v1/requirements/{req_id}/coverage",
+            json_body={"case_ids": case},
+        )
+    )
+
+
 @req_app.command("gaps")
 def req_gaps(project_id: int):
     _print(_request("GET", f"/api/v1/projects/{project_id}/coverage-gaps"))
