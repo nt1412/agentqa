@@ -9,6 +9,23 @@ from app.schemas.testcase import TestCaseCreate
 from app.services import executions, plans, projects, suites, testcases
 
 
+def test_json_safe_serializes_nested_datetimes():
+    import datetime as dt
+
+    from app.mcp_server.server import _json_safe
+
+    d = {
+        "a": dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+        "nested": [{"b": dt.datetime(2026, 1, 2, tzinfo=dt.UTC)}],
+        "n": 3,
+        "s": "x",
+    }
+    out = _json_safe(d)
+    assert out["a"] == "2026-01-01T00:00:00+00:00"
+    assert out["nested"][0]["b"].startswith("2026-01-02")
+    assert out["n"] == 3 and out["s"] == "x"
+
+
 @pytest.fixture(autouse=True)
 def _use_test_session(session, monkeypatch):
     class _Ctx:

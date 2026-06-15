@@ -1,4 +1,4 @@
-"""AQA MCP server — 28 workflow tools wrapping the shared service layer.
+"""AQA MCP server — workflow tools wrapping the shared service layer.
 
 Each tool opens its own DB session via _session(). Per-agent auth is opt-in
 (AQA_MCP_REQUIRE_AUTH): when on, every tool except register_agent requires a
@@ -7,6 +7,7 @@ docs/agent-guide.md for the agent workflow.
 """
 
 import base64
+import datetime as _dt
 import os
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -115,6 +116,19 @@ async def _require_agent(session):
             "(an agent key from register_agent / `aqa agent register`)."
         )
     return agent
+
+
+def _json_safe(obj):
+    """Recursively make a value JSON-serializable for an MCP tool return — chiefly
+    datetimes → ISO strings. REST serializes these automatically; MCP does not, so
+    tools wrap service dicts in this rather than each service remembering to."""
+    if isinstance(obj, _dt.datetime):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
 
 
 def _provenance_id(passed_id):
@@ -602,7 +616,7 @@ async def list_build_timeline(plan_id: int) -> list[dict]:
     """Builds for a plan, newest first, each with commit/branch and a
     pass/fail/blocked/not_run rollup + pass_rate. The build timeline."""
     async with _session() as s:
-        return await lineage.list_builds_enriched(s, plan_id)
+        return _json_safe(await lineage.list_builds_enriched(s, plan_id))
 
 
 @mcp.tool()
@@ -610,7 +624,7 @@ async def get_build_detail(build_id: int) -> dict:
     """A build's header (commit, branch, base_commit), its rollup, and each
     case's latest result in that build (collapsing re-runs to the latest)."""
     async with _session() as s:
-        return await lineage.build_detail(s, build_id)
+        return _json_safe(await lineage.build_detail(s, build_id))
 
 
 @mcp.tool()
@@ -618,7 +632,7 @@ async def get_case_history(case_id: int) -> dict:
     """A case's latest result per build, chronological (build, branch, commit,
     status), plus derived broke/fixed transitions — the known regression path."""
     async with _session() as s:
-        return await lineage.case_history(s, case_id)
+        return _json_safe(await lineage.case_history(s, case_id))
 
 
 @mcp.tool()
@@ -628,7 +642,7 @@ async def compare_builds(build_id: int, to: str = "baseline") -> dict:
     still_failing / still_passing / new_test / removed. A regression (was green
     on baseline, now red) is never conflated with a new_test (no baseline)."""
     async with _session() as s:
-        return await lineage.compare(s, build_id, to)
+        return _json_safe(await lineage.compare(s, build_id, to))
 
 
 @mcp.tool()
@@ -638,7 +652,7 @@ async def list_branch_status(project_id: int) -> list[dict]:
     baseline, else READY — so a green plan can't mask a regressing one. Includes
     per-plan breakdown. This is the pre-merge gate a human and agent share."""
     async with _session() as s:
-        return await lineage.branch_status(s, project_id)
+        return _json_safe(await lineage.branch_status(s, project_id))
 
 
 @mcp.tool()
@@ -657,7 +671,7 @@ async def get_project_health(project_id: int) -> dict:
     candidates (cases that flip status repeatedly), open regression count, and
     re-investigations avoidable (open regressions with a cached fix-path)."""
     async with _session() as s:
-        return await lineage.project_health(s, project_id)
+        return _json_safe(await lineage.project_health(s, project_id))
 
 
 @mcp.tool()
@@ -669,7 +683,7 @@ async def get_known_regressions(
     commit that fixed it last time, and the prior reasoning) when one exists. A hit
     means an expensive re-investigation can be skipped — the answer is cached."""
     async with _session() as s:
-        return await lineage.known_regressions(s, project_id, branch, case_ids)
+        return _json_safe(await lineage.known_regressions(s, project_id, branch, case_ids))
 
 
 @mcp.tool()
