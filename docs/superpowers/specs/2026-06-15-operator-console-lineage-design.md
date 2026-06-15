@@ -282,6 +282,66 @@ single biggest day-to-day improvement). Case-detail polish.
 - **Phase 3 — navigation.** Suite-browser search/filter/expand-collapse/breadcrumbs +
   inline latest-result. No schema delta.
 
+## Requirements & acceptance criteria (tracked in AQA as REQ-*)
+
+These are the enumerated, testable requirements extracted from the design above. Each is
+registered into AQA itself (dogfooding) with a coverage link to the pytest case that
+proves it, so this feature is tracked inside the tool it extends.
+
+**Recorder**
+- **REQ-RECORD-1** — `record_test_run`/`record_execution` accept optional `branch` and
+  `base_commit`; both are persisted on the build (find-or-create by `(plan, name)`).
+
+**Lineage spine & views**
+- **REQ-LINEAGE-1** — the `latest_result_per_build_case` view yields exactly one row per
+  `(build, case)`: the latest execution by `created_at` desc, `id` desc tiebreak.
+- **REQ-LINEAGE-2** — `build_rollup` reports pass/fail/blocked/not_run counts and
+  `pass_rate`; the `not_run` denominator is plan cases with no latest result in that build.
+- **REQ-LINEAGE-3** — build detail lists each case's latest result with exec id + duration.
+- **REQ-LINEAGE-4** — case history returns executions across builds (build name, branch,
+  commit, status, chronological) and derives `broke_at`/`fixed_at` commit pairs.
+- **REQ-LINEAGE-5** — the builds listing is enriched with `commit_id`, `branch`,
+  `base_commit`, `created_at`, and the build's rollup.
+
+**Compare / diff**
+- **REQ-COMPARE-1** — compare classifies each case as exactly one of regression / fixed /
+  still_failing / still_passing / new_test / removed.
+- **REQ-COMPARE-2** — a regression (baseline pass → build fail/blocked) is distinct from a
+  new_test (no baseline result) — the two are never conflated.
+- **REQ-COMPARE-3** — `compare?to=baseline` auto-resolves the baseline build.
+
+**Baseline resolution**
+- **REQ-BASELINE-1** — precise: when `base_commit` is supplied, baseline is the
+  default-branch build whose `commit_id == base_commit`.
+- **REQ-BASELINE-2** — fallback: otherwise baseline is the latest default-branch build at
+  or before the branch build's `created_at`.
+- **REQ-BASELINE-3** — no resolvable baseline ⇒ all results report as new, never as
+  regressions.
+- **REQ-BASELINE-4** — the default branch is read from `projects.options['default_branch']`,
+  defaulting to `"main"`.
+
+**Branches / merge-readiness**
+- **REQ-BRANCH-1** — branches listing returns active branches (builds within the trailing
+  window, excluding the default branch).
+- **REQ-BRANCH-2** — the verdict is computed at `(branch, head-commit)` summed across all
+  plans; it is **BLOCKED** if *any* plan regresses (no cross-plan false-green).
+- **REQ-BRANCH-3** — a per-plan breakdown is available alongside the summed verdict.
+
+**Known-regression guard (token-saver)**
+- **REQ-GUARD-1** — the guard returns open regressions on a branch, each annotated with its
+  known fix-path (broke@commit → fixed@commit + prior reasoning) when one exists, and an
+  empty result when none.
+
+**Collaboration (re-run)**
+- **REQ-RERUN-1** — requesting a re-run creates `assignments` with `type='rerun'`,
+  `build_id` set, `assigner_id` = the requester.
+- **REQ-RERUN-2** — idempotent: no duplicate *open* rerun for the same `(case, build)`.
+- **REQ-RERUN-3** — agents discover re-runs through the existing `list_assignments`.
+
+**Self-tracking**
+- **REQ-DOGFOOD-1** — all REQ-* above are registered in AQA with coverage links to their
+  covering tests.
+
 ## Testing & verification
 
 Service-layer tests under the existing savepoint isolation are the proof. Required edges:
