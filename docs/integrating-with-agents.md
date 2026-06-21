@@ -85,9 +85,14 @@ You have an `aqa` MCP server — the team's test-management + verification memor
 - **After any change:** `record_test_run(case_id, plan_id, build_name, status,
   commit_id, branch, base_commit)`. Record the real status — if a case can't run,
   record `blocked`, never fake `pass`.
-- **Before investigating a failure:** `get_known_regressions(project_id, branch)`.
-  If a cached fix-path comes back, use it instead of re-deriving (saves an expensive
-  investigation).
+- **Before investigating a failure:** call `get_failure_context(case_id)` first —
+  it returns this case's recent failures, prior reasoning, and **the last passing
+  run's reasoning** (why it was last green, often the fix for a recurrence). For a
+  pattern recurring across *other* cases, `search_recurrences(query_text)` does a
+  keyword search over prior failure/fix reasoning (pass and fail) — an empty result
+  means "no known prior" (a real signal, not an error). `get_known_regressions(project_id,
+  branch)` gives a cached cross-case fix-path. Reuse what comes back instead of
+  re-deriving (saves an expensive investigation).
 - **Claims you can't self-verify:** attach a `claim` to the run; a separate auditor
   confirms/refutes it (see §3). Don't verify your own claims.
 - **Encode prerequisites:** `add_test_dependency` so a downstream case is gated on
