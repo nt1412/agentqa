@@ -545,7 +545,8 @@ async def get_agent_execution_history(agent_id: int, project_id: int | None = No
 @mcp.tool()
 async def get_failure_context(case_id: int, plan_id: int | None = None, last_n: int = 5) -> dict:
     """Self-correction bundle: a case's recent failures, step failures, reasoning,
-    artifacts, and semantically similar failures elsewhere."""
+    the last passing run's reasoning (why it was last green — often the fix for a
+    recurrence), artifacts, and semantically similar failures elsewhere."""
     async with _session() as s:
         ctx = await evidence.get_failure_context(s, case_id, plan_id, last_n)
         return ctx.model_dump(mode="json")

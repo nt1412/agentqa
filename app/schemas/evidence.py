@@ -130,5 +130,9 @@ class FailureContext(BaseModel):
     case_name: str
     recent_executions: list[FailureExecution] = []
     prior_reasoning: list[dict] = []
+    # reasoning of the most-recent PASSING run for this case ("why it was last
+    # green" — often the fix for the issue now recurring). Surfaced separately so
+    # the recency cap on prior_reasoning can't bury it.
+    last_green_reasoning: dict | None = None
     artifacts: list[ArtifactOut] = []
     similar_failures: list[SimilarFailure] = []

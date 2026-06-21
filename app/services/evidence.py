@@ -435,5 +435,22 @@ async def get_failure_context(
     )
     ctx.prior_reasoning = [r for r in reasoning_rows if r is not None]
 
+    # last-green: reasoning of the most-recent PASSING run, surfaced separately so
+    # the recency cap above can't bury "why this test was green" (often the fix).
+    green_stmt = (
+        select(ExecutionReasoning.reasoning)
+        .join(Execution, Execution.id == ExecutionReasoning.execution_id)
+        .where(
+            Execution.version_id.in_(version_ids),
+            Execution.status == "pass",
+            ExecutionReasoning.reasoning.is_not(None),
+        )
+        .order_by(Execution.created_at.desc(), Execution.id.desc())
+        .limit(1)
+    )
+    if plan_id is not None:
+        green_stmt = green_stmt.where(Execution.plan_id == plan_id)
+    ctx.last_green_reasoning = (await session.execute(green_stmt)).scalars().first()
+
     ctx.similar_failures = await search_similar_failures(session, case_id, n=last_n)
     return ctx
