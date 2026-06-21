@@ -52,6 +52,58 @@ async def test_failure_context_bundle(session):
 
 
 @pytest.mark.asyncio
+async def test_failure_context_surfaces_last_green_reasoning(session):
+    # Phase 2: the last passing run's reasoning ("why it was green" — often the
+    # fix for the issue now recurring) must surface even when buried under more
+    # recent failures than the prior_reasoning recency cap (last_n).
+    p = await projects.create_project(session, ProjectCreate(name="P", prefix="FC3"))
+    s = await suites.create_suite(session, p.id, SuiteCreate(name="S"))
+    tc = await testcases.create_test_case(session, s.id, TestCaseCreate(name="c"))
+    plan = await plans.create_plan(session, p.id, PlanCreate(name="Plan"))
+    green = {"root_cause": "UseBlacklist=0 closes the shared self-DoS"}
+    await executions.record_execution(
+        session,
+        ExecutionCreate(
+            case_id=tc.id, plan_id=plan.id, build_name="g", status="pass", reasoning=green
+        ),
+        tester_id=None,
+    )
+    for i in range(6):  # 6 newer failures > default last_n=5, burying the green note
+        await executions.record_execution(
+            session,
+            ExecutionCreate(
+                case_id=tc.id,
+                plan_id=plan.id,
+                build_name=f"f{i}",
+                status="fail",
+                reasoning={"root_cause": f"later unrelated failure {i}"},
+            ),
+            tester_id=None,
+        )
+    ctx = await evidence.get_failure_context(session, tc.id)
+    assert ctx.last_green_reasoning == green
+
+
+@pytest.mark.asyncio
+async def test_failure_context_no_green_history(session):
+    # never-green case: last_green_reasoning is None, not an error
+    p = await projects.create_project(session, ProjectCreate(name="P", prefix="FC4"))
+    s = await suites.create_suite(session, p.id, SuiteCreate(name="S"))
+    tc = await testcases.create_test_case(session, s.id, TestCaseCreate(name="c"))
+    plan = await plans.create_plan(session, p.id, PlanCreate(name="Plan"))
+    await executions.record_execution(
+        session,
+        ExecutionCreate(
+            case_id=tc.id, plan_id=plan.id, build_name="b", status="fail",
+            reasoning={"root_cause": "first failure"},
+        ),
+        tester_id=None,
+    )
+    ctx = await evidence.get_failure_context(session, tc.id)
+    assert ctx.last_green_reasoning is None
+
+
+@pytest.mark.asyncio
 async def test_failure_context_unknown_case(session):
     with pytest.raises(NotFound):
         await evidence.get_failure_context(session, 999999)

@@ -11,8 +11,12 @@ AQA verification loop (required, not optional):
    "Done" = the gap is closed.
 3. After a change → record_test_run(case_id, plan_id, build_name, status, commit_id,
    branch, base_commit) where base_commit = `git merge-base HEAD main`.
-4. Before investigating a failure → get_known_regressions(project_id, branch); reuse a
-   cached fix-path instead of re-deriving.
+   On any FAILED run you MUST attach a 1-2 sentence reasoning root-cause — it is the
+   only text the failure memory embeds/recalls; a failure with no reasoning is invisible.
+4. Before investigating a failure → get_failure_context(case_id) first — it returns this
+   case's recent failures, prior reasoning, and the last passing run's reasoning (why it
+   was last green — often the fix for a recurrence). Also get_known_regressions(project_id,
+   branch) for a cached cross-case fix-path; reuse what's there instead of re-deriving.
 5. Don't claim done while get_coverage_gaps(project_id) lists your requirement.
 
 Onboarding over REST/CLI needs AQA_ENROLL_KEY (sent as X-Enroll-Key); only MCP
