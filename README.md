@@ -3,7 +3,8 @@
 [![CI](https://github.com/nt1412/aqa/actions/workflows/ci.yml/badge.svg)](https://github.com/nt1412/aqa/actions/workflows/ci.yml)
 
 **The system of record for agentic verification.** Your agents write code, your
-tests verify it — AQA *remembers*, so nothing breaks twice.
+tests verify it — AQA *remembers* prior failures, so a recurrence comes back with
+its earlier diagnosis instead of being re-derived from scratch.
 
 AQA (pronounced "aqua") is test management built for the agentic coding loop — a
 [TestLink](https://testlink.org)-equivalent that sits one layer above your test
@@ -28,8 +29,11 @@ service layer.
 
 ## What it does
 
-- **🔒 Regression ratchet** — every bug becomes a permanent test case, so "this
-  broke once" can't silently come back. Your suite becomes accumulated memory.
+- **🔒 Regression memory** — a failed run's root-cause reasoning is remembered;
+  when a similar failure recurs, AQA surfaces the prior diagnosis and the last
+  green run's fix back to the agent (keyword + semantic recall, with a silence
+  gate when there's no real prior) so it reuses the answer instead of re-deriving
+  it. Your suite becomes accumulated memory.
 - **🔦 Blind-spot radar** — `get_coverage_gaps` surfaces requirements with no
   test (and the backfill flags cases traced to no requirement), and self-heals so
   coverage can't silently drift.
