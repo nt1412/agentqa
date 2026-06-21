@@ -13,6 +13,8 @@ recipes: `docs/integrating-with-agents.md`.
    "Done" = the gap is closed.
 3. **After a change** → `record_test_run(case_id, plan_id, build_name, status,
    commit_id, branch, base_commit)` (`base_commit = git merge-base HEAD main`).
+   **On any FAILED run you MUST attach a 1–2 sentence `reasoning` root-cause** —
+   it is the only text the failure memory embeds/recalls; no reasoning = invisible.
 4. **Before investigating a failure** → `get_known_regressions(project_id, branch)`;
    reuse a cached fix-path instead of re-deriving.
 5. **Don't claim done** while `get_coverage_gaps(project_id)` lists your requirement.

@@ -16,6 +16,9 @@ and the `aqa` CLI. Full recipes: `docs/integrating-with-agents.md`.
 3. **After a change** → `record_test_run(case_id, plan_id, build_name, status,
    commit_id, branch, base_commit)`. Pass `branch` and `base_commit`
    (`git merge-base HEAD main`) so a branch's delta vs main resolves precisely.
+   **On any FAILED run, you MUST attach a 1–2 sentence `reasoning` root-cause** —
+   this is the only text the failure memory embeds and later recalls; a failure
+   recorded without reasoning is invisible to retrieval (and to the team).
 4. **Before investigating a failure** → `get_known_regressions(project_id, branch)`.
    If a fix-path is cached, reuse it instead of re-deriving (saves expensive tokens).
 5. **Don't claim done** while `get_coverage_gaps(project_id)` lists your requirement.
