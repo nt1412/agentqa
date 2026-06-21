@@ -1,5 +1,3 @@
-import json
-
 import pytest
 from sqlalchemy import select
 
@@ -22,6 +20,41 @@ def test_fake_embed_is_deterministic_and_dim():
     assert len(a) == embeddings.EMBEDDING_DIM
     assert a == b
     assert a != c
+
+
+def test_embed_text_drops_noise_keys_keeps_prose():
+    # L33T-shape: commit/verdict/evidence_tail are noise; the prose is the signal
+    r = {
+        "commit": "be09f050abc",
+        "method": "noVNC reconnect storm; UseBlacklist regressed",
+        "verdict": "fail",
+        "evidence_tail": "## long markdown dump\nstatus messaging ...",
+    }
+    out = embeddings.embed_text_for(r, None)
+    assert "noVNC reconnect storm" in out
+    assert "be09f050abc" not in out          # commit hash dropped
+    assert "long markdown dump" not in out    # evidence_tail dropped
+    assert "fail" not in out                  # verdict dropped
+
+
+def test_embed_text_keeps_root_cause_shape():
+    assert embeddings.embed_text_for({"root_cause": "int truncation drops cents"}, None) == (
+        "int truncation drops cents"
+    )
+
+
+def test_embed_text_prepends_notes():
+    assert embeddings.embed_text_for({"root_cause": "db timeout"}, "assertion failed") == (
+        "assertion failed db timeout"
+    )
+
+
+def test_embed_text_none_reasoning_uses_notes():
+    assert embeddings.embed_text_for(None, "just notes") == "just notes"
+
+
+def test_embed_text_empty_when_only_noise():
+    assert embeddings.embed_text_for({"commit": "x", "verdict": "fail"}, None) == ""
 
 
 def test_embed_module_has_contract():
@@ -68,8 +101,9 @@ async def test_embedding_stored_when_available(session, monkeypatch):
         )
     ).scalar_one()
     assert row.embedding is not None
-    # the embedding equals fake_embed of the combined text
-    expected = fake_embed("assertion error on login " + json.dumps({"trace": "line 12"}))
+    # the embedding equals fake_embed of the cleaned text (notes + prose values,
+    # no json.dumps scaffolding)
+    expected = fake_embed("assertion error on login line 12")
     assert list(row.embedding) == pytest.approx(expected, rel=1e-5)
 
 

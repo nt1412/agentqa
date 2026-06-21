@@ -1,5 +1,3 @@
-import json
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,9 +45,7 @@ async def record_claims_and_reasoning(
     if not has_reasoning_row:
         return
 
-    embed_text = " ".join(
-        part for part in [notes, json.dumps(reasoning) if reasoning is not None else None] if part
-    ).strip()
+    embed_text = embeddings.embed_text_for(reasoning, notes)
     embedding = None
     if embed_text and embeddings.is_available():
         try:
